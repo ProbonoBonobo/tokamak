@@ -1,0 +1,20 @@
+[aria-hidden="1"] {
+    display: None;
+    visibility: hidden;
+}
+#approot > div {
+    margin-top: 14.5px !important;
+}
+#submit {
+    margin-top: 38.1px !important;
+}
+label {
+    margin-top: 9.5px;
+}
+.Select-value {
+    padding-left: 14.5px !important;
+}
+#clicks {
+    font-size: 18px;
+    font-family: "InputMono", monospace;
+}

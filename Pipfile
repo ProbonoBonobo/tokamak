@@ -1,0 +1,22 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+ptpython = ">2.0"
+
+[packages]
+dash = ">=1.6"
+redis = ">=3.3.11"
+flask_caching = ">=1.7.2"
+dash_bootstrap_components = ">=0.7"
+dash_html_components = ">=1.0"
+dash_core_components = ">=1.5"
+gemeinsprache = ">=0.0"
+termcolor = ">=1.1.0"
+codegen = ">=1.0"
+werkzeug = "*"
+
+[requires]
+python_version = "3.7"
