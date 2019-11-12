@@ -1,10 +1,8 @@
 import dash_bootstrap_components as dbc
-from dash.dependencies import ClientsideFunction
 import random
 from functools import partial
 from collections import defaultdict, deque, OrderedDict, Counter
 import inspect
-import dash_core_components as dcc
 from dash import no_update
 import dash_html_components as html
 import datetime
@@ -197,7 +195,6 @@ def default_props(argmap):
 class Reactor(object):
 
     _cache = {}
-    _id = 0
     _exec_times = defaultdict(float)
 
     def __init__(self, app, nodes):
@@ -215,19 +212,14 @@ class Reactor(object):
                 )
             )
         # nodes = self._assign_keys_to_children(nodes)
-        self._id += 1
+
         self.DEBUG = DEBUG
         self.nodes = IndexedDict({node.id: node for node in nodes} if not isinstance(nodes, dict) else nodes)
-        self.nodes['appstate'] = dcc.Store(id='appstate', storage_type='local', state={
-            'id': self._id,
-            'targets': self.targets
-        })
-        self.nodes['eventloop'] = dcc.Interval(id='eventloop', interval=1000),
         self.classmap = {}
         self.renderers = {}
         self.semaphores = {}
         self.pending = {}
-        self._batched_callback = None
+        self.batched_callback = None
 
         for id, node in self.nodes.items():
             # 1. Index the node by id in the class object's 'nodes' dictionary
@@ -282,19 +274,12 @@ class Reactor(object):
             # except:
             #     # if the node has no callbacks, method list is the empty list
             #     methods = []
-            print(node)
-            try:
-                self.classmap[node.id] = methods
-            except:
-                pass
-        app = self._set_initial_layout(app)
-        self._generate_callbacks(app)
+
+            self.classmap[node.id] = methods
+        self.app = self._set_initial_layout(app)
+        self._generate_callbacks()
 
 
-        @app.callback(*self._callback_dependencies)
-        # @cache.memoize(timeout=2)
-        def callback(*args):
-            return self._batched_callback(*args)
 
     def validate_transformer(self, node, tx_name):
         name = tx_name
@@ -438,28 +423,21 @@ class Reactor(object):
                     dark=True,
                     style={"color": "#EEEEEE"},
                 ),
-
-                self.nodes.eventloop[0],
                 dbc.Container(
                     id="approot", children=self.view, style={"marginTop": "61.8px"}
                 ),
-                html.P(id='targets', children=[','.join(target) for target in self.targets]),
-                self.nodes.appstate,
             ]
         )
         return app
 
-    def _generate_callbacks(self, app):
-        def _update_state(state, targets=None, app_state=None, DEBUG=None):
+    def _generate_callbacks(self):
+        def _update_state(*args, targets=None, app_state=None, DEBUG=None):
             # print('Updating')
-            print(f"_update_state got args:")
-            pp(vars())
             has_update = False
-            for target, value in state.items():
-
-                id, prop = target.split(",")
+            for target, value in zip(targets, args):
+                id, prop = target
                 curr = getattr(app_state.nodes[id], prop)
-                if curr != value and value != 'no_update':
+                if curr != value:
                     has_update = True
                     app_state.submit_update(id, prop, value)
             if not has_update:
@@ -480,25 +458,20 @@ class Reactor(object):
             return updated_view
 
         _scoped = partial(
-            _update_state,  app_state=self, DEBUG=self.DEBUG
+            _update_state, targets=self.targets, app_state=self, DEBUG=self.DEBUG
         )
 
-        def batched_callback(args):
-            return _scoped(args)
+        def batched_callback(*args):
+            return _scoped(*args)
 
-        self._batched_callback = batched_callback
-        self._callback_dependencies = (
+        self.batched_callback = _scoped
+        self.callback_dependencies = (
             dash.dependencies.Output("approot", "children"),
-            [dash.dependencies.Input("appstate", "state")]
-        )
-        app.clientside_callback(
-            ClientsideFunction(
-                namespace='clientside',
-                function_name='display'
-            ),
-            dash.dependencies.Output('appstate', 'state'),
-            [dash.dependencies.Input('eventloop', 'n_intervals')],
-            [dash.dependencies.State('targets', 'children'), *[dash.dependencies.State(*target) for target in self.targets]]
+            [
+                dash.dependencies.Input(*target)
+                for target in self.targets
+                if target[0] != "interval_component"
+            ],
         )
 
     def to_plotly_json(self, node):
@@ -531,11 +504,8 @@ class Reactor(object):
             "label",
             "inverse",
         }
-        immutable_ids = ['appstate', 'approot', 'eventloop', 'targets']
         for id, node in self.nodes.items():
-            if id in immutable_ids:
-                continue
-            if isinstance(node, tuple):
+            if id == "interval_component":
                 # yield ('interval_component', 'n_intervals')
                 continue
             for attr in node.__dict__.keys():
@@ -551,25 +521,24 @@ class Reactor(object):
 
     def update_nodes(self):
         has_update = False
+        pp(self.pending)
         for id, node in self.nodes.items():
-            if not isinstance(node, Component):
-                continue
             component_updates = [(k, v[-1]) for k, v in self.pending[id].items() if len(v)]
 
             component_has_updates = len(component_updates)
             DEBUG = self.DEBUG and id not in ignored
 
-            if hasattr(node, 'id'):
+            if component_has_updates:
                 if self.semaphores[id].acquire():
                     changed_props = []
                     msg = ""
-                    if DEBUG:
+                    if DEBUG and component_has_updates:
                         print(yellow(f"{'[ACQUIRED]':>16}") + grey("  ::  "), end="")
                         print(
                             cyan(node.id),
                             white(f"locked by"),
                             cyan("BROWSER"),
-                            f"pending updates to {component_has_updates} props: {magenta(list(dict(component_updates).keys()))} {component_updates})",
+                            f"pending updates to {component_has_updates} props: {magenta(list(dict(component_updates).keys()))} {dict(component_updates)})",
                         )
                         # if component_has_updates:
                         #     pp(dict(component_updates))
@@ -584,11 +553,13 @@ class Reactor(object):
                         except:
                             next = prev
                         if DEBUG:
-                            msg = f"{id}.{prop} (=> {prev}) has {len(updates)} pending updates: {list(updates)}"
-                        if not updates:
-                            if DEBUG:
-                                print(grey(msg))
-                            continue
+                            if next != prev:
+                                msg = f"{id}.{prop} (=> {prev}) has {len(updates)} pending updates: {next}"
+                                print(msg)
+                        # if not updates:
+                        #     if DEBUG:
+                        #         print(grey(msg))
+                        #     continue
                         else:
                             print(green(msg), yellow(f"(Setting to {next}!)"))
                         while updates:

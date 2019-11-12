@@ -1,27 +1,29 @@
 from functools import reduce
 from tokamak.models import Reactor, transformer, default_props
+from tokamak.utils import pidofport
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 import json
 import dash
 from flask_caching import Cache
+import dash_html_components as html
 import os
 external_stylesheets = [dbc.themes.LUX]
 DEBUG = True
 app = dash.Dash(
     "app8", external_stylesheets=external_stylesheets, suppress_callback_exceptions=True
 )
-#
-# CACHE_CONFIG = {
-#     # try 'filesystem' if you don't want to setup redis
-#     'CACHE_TYPE': 'redis',
-#     'CACHE_REDIS_URL': os.environ.get('REDIS_URL', 'redis://localhost:6379')
-# }
-# cache = Cache()
-# cache.init_app(app.server, config=CACHE_CONFIG)
+
+CACHE_CONFIG = {
+    # try 'filesystem' if you don't want to setup redis
+    'CACHE_TYPE': 'redis',
+    'CACHE_REDIS_URL': os.environ.get('REDIS_URL', 'redis://localhost:6379')
+}
+cache = Cache()
+cache.init_app(app.server, config=CACHE_CONFIG)
 
 
-# @cache.memoize(timeout=1)
+@cache.memoize(timeout=1)
 def global_store(*args, **kwargs):
     return InterferenceGenerator(*args, **kwargs)
 
@@ -32,7 +34,7 @@ def optionize(*args):
 @default_props({'aria-hidden': '0',
                 'aria-label': lambda node: node.id,
                 'valid': lambda node: isinstance(node, dcc.Dropdown)})
-# @cache.memoize(timeout=1)
+@cache.memoize(timeout=1)
 def generate_nodes():
     nodes = [
         dcc.Dropdown(
@@ -41,7 +43,6 @@ def generate_nodes():
             options=[{"label": k, "value": k} for k in ("MAT", "AWG", "PCAP")],
             label="File Type",
             renderer="labeled_form_group",
-
         ),
         dbc.Input(
             id="file_path",
@@ -52,6 +53,18 @@ def generate_nodes():
             renderer="labeled_form_group",
             className="validate_file_path",
         ),
+        dbc.Tooltip(
+            target='file_path',
+            id='file_path_popover',
+            trigger='focus',
+            placement='right',
+            children="",
+            innerClassName='my_toolip',
+            autohide=False,
+            hide_arrow=False,
+            className='update_filepath_popover',
+        **{'aria-hidden': '1'}),
+
         dcc.Dropdown(
             id="interference_type",
             value="TypeA",
@@ -66,10 +79,9 @@ def generate_nodes():
             dbc.Input(
                 id=f"Param{i}",
                 type="number",
-
+                valid=False,
                 value=0.0,
                 renderer="labeled_form_group",
-                valid=False,
                 className="update_param_visibility validate_param",
                 **{"aria-hidden": "1"},
             )
@@ -86,7 +98,7 @@ def generate_nodes():
             ),
             dcc.Markdown(
                 id="clicks",
-                children="Clicked 0 times",
+                children="",
                 className="update_submit_msg"
             )
         ])
@@ -94,7 +106,7 @@ def generate_nodes():
     return nodes
 
 
-# @cache.memoize(timeout=1)
+@cache.memoize(timeout=1)
 class InterferenceGenerator(Reactor):
 
 
@@ -153,6 +165,24 @@ class InterferenceGenerator(Reactor):
         setattr(node, "aria-hidden", "0")
         return node
 
+    def update_filepath_popover(self, node):
+
+        required_postfix = self.required_ext[self.nodes.file_type.value]
+        has_required_postfix = self.nodes.file_path.value.endswith(required_postfix)
+        is_open = not bool(has_required_postfix)
+        if is_open:
+            node.children = f"Filepath must end with {required_postfix}"
+            node.hide_arrow = False
+            node.innerClassName='my_tooltip col-2'
+            node.style={'fontSize': '30px'}
+            setattr(node, 'aria-hidden', '0')
+        else:
+            node.hide_arrow = True
+            node.children = []
+            node.innerClassName='hidden'
+            setattr(node, 'aria-hidden', '1')
+        return node
+
     @property
     def operators(self):
         return [self.nodes[operator_id] for operator_id in self._operators]
@@ -202,7 +232,7 @@ class InterferenceGenerator(Reactor):
 
     @property
     def view(self):
-        return [self.renderers[id](node) for id, node in list(self.nodes.items())[:-2]]
+        return [self.render(node) for id, node in self.nodes.items()]
 
     def identity(self, node):
         return dbc.FormGroup([dbc.Col(node)], row=True)
@@ -217,21 +247,36 @@ class InterferenceGenerator(Reactor):
         node.disabled = not bool(ok)
         node.active = bool(ok)
         return node
+    
     def to_dict(self):
-        return {node_id: self.nodes[node_id].value or 0 for node_id in sorted(list(self.visible_nodes))}
+        return {node_id: self.nodes[node_id].value or 0 for node_id in sorted(self.visible_nodes, reverse=True)}
+    
     def update_submit_msg(self, node):
-        node.children = '        '.join([])
+        node.children = '\n'.join(['```',json.dumps(
+            self.to_dict(),
+            indent=4,
+            sort_keys=True
+        ), '```'])
 
         return node
 
 
 if __name__ == "__main__":
     nodes = generate_nodes()
-    app_state = global_store(app, nodes)
+    app_state = InterferenceGenerator(app, nodes)
+
+
+    @app.callback(*app_state.callback_dependencies)
+    def callback(*args):
+        return app_state.batched_callback(*args)
     # with open("/tmp/app82.dill", "wb") as f:
     #     ser = json.loads(app_state.__str__())
     #     dill.dump(ser, f)
 
     for node in app_state.view:
-        print(node)    # app.run_server(port=8089, debug=True)
-    app.run_server(port=8092, debug=True)
+        print(node)
+    try:
+        app.run_server(port=8090, debug=True)
+    except OSError as e:
+        pidofport(8089, killall=True)
+        app.run_server(port=8090, debug=True)

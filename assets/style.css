@@ -1,6 +1,13 @@
-[aria-hidden="1"] {
-    display: None;
-    visibility: hidden;
+[aria-hidden="1"],
+[aria-hidden="1"] >*,
+[aria-hidden="1"] > * > *,
+[aria-hidden="1"] > * > * > *,
+[aria-hidden="1"] > * > * > * > *,
+[aria-hidden="1"] > * > * > * > * > *,
+.hidden {
+    display: None !important;
+    visibility: hidden !important;
+    color: rgba(0,0,0,0);
 }
 #approot > div {
     margin-top: 14.5px !important;
@@ -16,5 +23,12 @@ label {
 }
 #clicks {
     font-size: 18px;
-    font-family: "InputMono", monospace;
+    font-family: InputMono, monospace;
+}
+.my_tooltip, .my_tooltip * {
+    max-width: 180px;
+    font-style: italic;
+    padding: 9.5px 14.5px;
+    font-size: 14px !important;
+    font-family: "Roboto Light" !important;
 }
