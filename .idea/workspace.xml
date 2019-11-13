@@ -57,7 +57,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.timer">
+  <component name="RunManager" selected="Python.app8">
     <configuration name="app8" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="tokamak" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -145,11 +145,11 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.app8" />
         <item itemvalue="Python.timer" />
         <item itemvalue="Python.app8" />
         <item itemvalue="Python.sessionstoragedemo" />
         <item itemvalue="Python.asynctest" />
-        <item itemvalue="Python.app8" />
       </list>
     </recent_temporary>
   </component>
@@ -207,7 +207,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/tokamak$asynctest.coverage" NAME="asynctest Coverage Results" MODIFIED="1573342551239" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/tokamak$timer.coverage" NAME="timer Coverage Results" MODIFIED="1573601498755" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/tokamak$timer.coverage" NAME="timer Coverage Results" MODIFIED="1573604673902" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/tokamak$sessionstoragedemo.coverage" NAME="sessionstoragedemo Coverage Results" MODIFIED="1573588659887" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/tokamak$app8.coverage" NAME="app8 Coverage Results" MODIFIED="1573343047409" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
