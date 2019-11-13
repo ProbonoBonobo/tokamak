@@ -57,7 +57,7 @@ def generate_nodes():
             target='file_path',
             id='file_path_popover',
             trigger='focus',
-            placement='right',
+            placement='right-start',
             children="",
             innerClassName='my_toolip',
             autohide=False,
@@ -266,7 +266,8 @@ if __name__ == "__main__":
     app_state = InterferenceGenerator(app, nodes)
 
 
-    @app.callback(*app_state.callback_dependencies)
+    @app_state.app.callback(*app_state.callback_dependencies)
+    # @cache.memoize()
     def callback(*args):
         return app_state.batched_callback(*args)
     # with open("/tmp/app82.dill", "wb") as f:
