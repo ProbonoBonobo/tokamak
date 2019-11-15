@@ -7,7 +7,6 @@ verify_ssl = true
 ptpython = ">2.0"
 
 [packages]
-dash = ">=1.6"
 redis = ">=3.3.11"
 flask_caching = ">=1.7.2"
 dash_bootstrap_components = ">=0.7"
@@ -17,6 +16,7 @@ gemeinsprache = ">=0.0"
 termcolor = ">=1.1.0"
 codegen = ">=1.0"
 werkzeug = "*"
+dash-1-6-0 = {git = "git://github.com/ProbonoBonobo/dash.git"}
 
 [requires]
 python_version = "3.7"

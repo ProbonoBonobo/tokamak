@@ -9,7 +9,7 @@ from flask_caching import Cache
 import dash_html_components as html
 import os
 external_stylesheets = [dbc.themes.LUX]
-DEBUG = True
+DEBUG = False
 app = dash.Dash(
     "app8", external_stylesheets=external_stylesheets, suppress_callback_exceptions=True
 )
@@ -57,7 +57,7 @@ def generate_nodes():
             target='file_path',
             id='file_path_popover',
             trigger='focus',
-            placement='right',
+            placement='right-start',
             children="",
             innerClassName='my_toolip',
             autohide=False,
@@ -93,7 +93,6 @@ def generate_nodes():
                 children="submit",
                 color="primary",
                 block=True,
-                inverse=True,
                 n_clicks=0
             ),
             dcc.Markdown(
@@ -106,7 +105,7 @@ def generate_nodes():
     return nodes
 
 
-@cache.memoize(timeout=1)
+# @cache.memoize(timeout=1)
 class InterferenceGenerator(Reactor):
 
 
@@ -154,7 +153,7 @@ class InterferenceGenerator(Reactor):
         #    2. nodes to matching renderer methods (if any) contained in 'renderer' property;
         #    3. matching transformer/renderer methods to the bundled application
         #      callback, to be executed sequentially on each clientside state update.
-        super().__init__(app, nodes)
+        super().__init__(app, nodes, DEBUG)
 
 
     def hide(self, node):
@@ -166,18 +165,17 @@ class InterferenceGenerator(Reactor):
         return node
 
     def update_filepath_popover(self, node):
-
         required_postfix = self.required_ext[self.nodes.file_type.value]
         has_required_postfix = self.nodes.file_path.value.endswith(required_postfix)
         is_open = not bool(has_required_postfix)
         if is_open:
             node.children = f"Filepath must end with {required_postfix}"
-            node.hide_arrow = False
+            node.hide_arrow = 0
             node.innerClassName='my_tooltip col-2'
             node.style={'fontSize': '30px'}
             setattr(node, 'aria-hidden', '0')
         else:
-            node.hide_arrow = True
+            node.hide_arrow = 1
             node.children = []
             node.innerClassName='hidden'
             setattr(node, 'aria-hidden', '1')
@@ -239,7 +237,7 @@ class InterferenceGenerator(Reactor):
 
     def labeled_form_group(self, node):
         return dbc.Row(children=[dbc.Col(dbc.Label(children=[node.id]), width=2),
-                        dbc.Col(node, width=10)],
+                        dbc.Col(node, width=8)],
                         **{"aria-hidden": getattr(node, "aria-hidden")})
 
     def prevent_invalid_submissions(self, node):
@@ -266,7 +264,8 @@ if __name__ == "__main__":
     app_state = InterferenceGenerator(app, nodes)
 
 
-    @app.callback(*app_state.callback_dependencies)
+    @app_state.app.callback(*app_state.callback_dependencies)
+    # @cache.memoize()
     def callback(*args):
         return app_state.batched_callback(*args)
     # with open("/tmp/app82.dill", "wb") as f:

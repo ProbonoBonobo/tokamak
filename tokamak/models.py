@@ -1,4 +1,14 @@
+import dash
+try:
+    # the try/except block is mainly to stay pep-8 compliant and avoid getting scolded about our import statements
+    # being out-of-order
+    from tokamak.install import apply_hotfixes
+    apply_hotfixes()
+except Exception as e:
+    print(f"Error applying hotfixes: {e.__class__.__name__} :: {e}")
+
 import dash_bootstrap_components as dbc
+import dash_core_components as dcc
 import random
 from functools import partial
 from collections import defaultdict, deque, OrderedDict, Counter
@@ -7,7 +17,7 @@ from dash import no_update
 import dash_html_components as html
 import datetime
 from gemeinsprache.utils import *
-from rube.utils import pp, pidofport
+from tokamak.utils import pp, pidofport
 import dash
 from multiprocessing import RLock
 from dash.development.base_component import Component
@@ -138,8 +148,16 @@ def default_props(argmap):
 
     return outer
 
+from collections import deque
 
-#
+def init_buffer(length, default=None):
+    return deque([default for i in range(length)], maxlen=length)
+
+class AtomicState(dcc.Store):
+    _cache = defaultdict(lambda: init_buffer(32))
+    def __init__(self, id, storage_type='session', state={}):
+        self._cache[id].append(state)
+        super().__init__(id=id, storage_type=storage_type, data=state)
 # def transformer2(*args):
 #     log_func_call_args = not bool(args)
 #     triggers = args
@@ -196,8 +214,31 @@ class Reactor(object):
 
     _cache = {}
     _exec_times = defaultdict(float)
+    _immutable_attrs = {
+        "id",
+        "key",
+        "type",
+        "className",
+        "props",
+        "namespace",
+        "_namespace",
+        "_type",
+        "_prop_names",
+        "_valid_wildcard_attributes",
+        "_dynamic_props",
+        "available_properties",
+        "available_wildcard_properties",
+        "DYNAMIC_PROPS",
+        "func_params",
+        "valid_wildcard_attributes",
+        "renderer",
+        "label",
+        "inverse",
+        "in-navbar"
+    }
 
-    def __init__(self, app, nodes):
+    def __init__(self, app, nodes, debug):
+        self.DEBUG = debug
         if hasattr(self, "nodes"):
             raise RuntimeError(
                 red(
@@ -213,7 +254,6 @@ class Reactor(object):
             )
         # nodes = self._assign_keys_to_children(nodes)
 
-        self.DEBUG = DEBUG
         self.nodes = IndexedDict({node.id: node for node in nodes} if not isinstance(nodes, dict) else nodes)
         self.classmap = {}
         self.renderers = {}
@@ -484,32 +524,9 @@ class Reactor(object):
         return ser
 
     def iter_targets(self):
-        immutable_attrs = {
-            "id",
-            "key",
-            "type",
-            "className",
-            "props",
-            "namespace",
-            "_namespace",
-            "_type",
-            "_prop_names",
-            "_valid_wildcard_attributes",
-            "available_properties",
-            "available_wildcard_properties",
-            "DYNAMIC_PROPS",
-            "func_params",
-            "valid_wildcard_attributes",
-            "renderer",
-            "label",
-            "inverse",
-        }
         for id, node in self.nodes.items():
-            if id == "interval_component":
-                # yield ('interval_component', 'n_intervals')
-                continue
             for attr in node.__dict__.keys():
-                if attr not in immutable_attrs:
+                if attr not in self._immutable_attrs:
                     yield (id, attr)
 
     @property
@@ -521,7 +538,7 @@ class Reactor(object):
 
     def update_nodes(self):
         has_update = False
-        pp(self.pending)
+        # pp(self.pending)
         for id, node in self.nodes.items():
             component_updates = [(k, v[-1]) for k, v in self.pending[id].items() if len(v)]
 
@@ -560,8 +577,8 @@ class Reactor(object):
                         #     if DEBUG:
                         #         print(grey(msg))
                         #     continue
-                        else:
-                            print(green(msg), yellow(f"(Setting to {next}!)"))
+                        # else:
+                        #     print(green(msg), yellow(f"(Setting to {next}!)"))
                         while updates:
                             updates.popleft()
                     if DEBUG:
@@ -650,7 +667,7 @@ class Reactor(object):
                 if has_update:
                     before_dict = json.loads(before)
                     after_dict = json.loads(after)
-                    print(f"Before dict: {before_dict}")
+                    # print(f"Before dict: {before_dict}")
                     changed_props = {
                         k: v
                         for k, v in before_dict.items()
