@@ -1,0 +1,86 @@
+{
+    "MyComponent.react.js": {
+        "props": {
+            "foo": {
+                "type": {
+                    "name": "number"
+                },
+                "required": false,
+                "description": "Description of prop foo.",
+                "defaultValue": {
+                    "value": "42",
+                    "computed": false
+                }
+            },
+            "children": {
+                "type": {
+                    "name": "object"
+                },
+                "description": "Children",
+                "required": false
+            },
+            "data-*": {
+                "type": {
+                    "name": "string"
+                },
+                "description": "Wildcard data",
+                "required": false
+            },
+            "aria-*": {
+                "type": {
+                    "name": "string"
+                },
+                "description": "Wildcard aria",
+                "required": false
+            },
+            "bar": {
+                "type": {
+                    "name": "custom"
+                },
+                "required": false,
+                "description": "Description of prop bar.",
+                "defaultValue": {
+                    "value": "21",
+                    "computed": false
+                }
+            },
+            "baz": {
+                "type": {
+                    "name": "union",
+                    "value": [
+                        {
+                            "name": "number"
+                        },
+                        {
+                            "name": "string"
+                        }
+                    ]
+                },
+                "required": false,
+                "description": ""
+            }
+        },
+        "description": "General component description.",
+        "methods": []
+    },
+    "A.react.js": {
+        "description": "",
+        "methods": [],
+        "props": {
+            "href": {
+                "type": {
+                    "name": "string"
+                },
+                "required": false,
+                "description": "The URL of a linked resource."
+            },
+            "children": {
+                "type": {
+                    "name": "object"
+                },
+                "description": "Children",
+                "required": false
+            }
+        }
+    }
+}

@@ -3,16 +3,37 @@ from tokamak.models import Reactor, transformer, default_props
 from tokamak.utils import pidofport
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
+from werkzeug.serving import WSGIRequestHandler
 import json
 import dash
+# import dash_daq as daq
 from flask_caching import Cache
 import dash_html_components as html
 import os
-external_stylesheets = [dbc.themes.LUX]
-DEBUG = False
-app = dash.Dash(
-    "app8", external_stylesheets=external_stylesheets, suppress_callback_exceptions=True
-)
+import datetime
+import os
+import random
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output
+from flask_caching import Cache
+from dash import no_update
+
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css', dbc.themes.BOOTSTRAP, dbc.themes.LUX]
+
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+cache = Cache(app.server, config={
+    # try 'filesystem' if you don't want to setup redis
+    'CACHE_TYPE': 'filesystem',
+    'CACHE_DIR': "/tmp"
+})
+app.config.suppress_callback_exceptions = True
+server = app.server
+
+DEBUG = True
+timeout = 20
+
 
 CACHE_CONFIG = {
     # try 'filesystem' if you don't want to setup redis
@@ -49,21 +70,13 @@ def generate_nodes():
             value="",
             type="text",
             placeholder="Enter filename to save output file",
+            popover_text="hello",
             valid=False,
             renderer="labeled_form_group",
-            className="validate_file_path",
+            className="validate_file_path update_file_path_popover_text",
+            spellcheck="false"
         ),
-        dbc.Tooltip(
-            target='file_path',
-            id='file_path_popover',
-            trigger='focus',
-            placement='right-start',
-            children="",
-            innerClassName='my_toolip',
-            autohide=False,
-            hide_arrow=False,
-            className='update_filepath_popover',
-        **{'aria-hidden': '1'}),
+
 
         dcc.Dropdown(
             id="interference_type",
@@ -74,20 +87,22 @@ def generate_nodes():
             className="update_interference_options"
 
         ),
-    ]
-    nodes.extend([
-            dbc.Input(
+        *[
+
+        dbc.Input(
                 id=f"Param{i}",
+                popover_text="",
                 type="number",
                 valid=False,
                 value=0.0,
+                min=0,
+                max=64,
                 renderer="labeled_form_group",
-                className="update_param_visibility validate_param",
+                className="update_param_popover_text update_param_visibility validate_param",
                 **{"aria-hidden": "1"},
             )
             for i in range(1, 14)
-        ])
-    nodes.extend([
+        ], *[
             dbc.Button(
                 id="submit",
                 children="submit",
@@ -100,7 +115,7 @@ def generate_nodes():
                 children="",
                 className="update_submit_msg"
             )
-        ])
+        ]]
 
     return nodes
 
@@ -153,6 +168,7 @@ class InterferenceGenerator(Reactor):
         #    2. nodes to matching renderer methods (if any) contained in 'renderer' property;
         #    3. matching transformer/renderer methods to the bundled application
         #      callback, to be executed sequentially on each clientside state update.
+
         super().__init__(app, nodes, DEBUG)
 
 
@@ -164,22 +180,48 @@ class InterferenceGenerator(Reactor):
         setattr(node, "aria-hidden", "0")
         return node
 
-    def update_filepath_popover(self, node):
+
+    def update_file_path_popover_text(self, node):
         required_postfix = self.required_ext[self.nodes.file_type.value]
         has_required_postfix = self.nodes.file_path.value.endswith(required_postfix)
         is_open = not bool(has_required_postfix)
         if is_open:
-            node.children = f"Filepath must end with {required_postfix}"
-            node.hide_arrow = 0
-            node.innerClassName='my_tooltip col-2'
-            node.style={'fontSize': '30px'}
-            setattr(node, 'aria-hidden', '0')
+            node.popover_text = f"Filepath must end with {required_postfix}"
         else:
-            node.hide_arrow = 1
-            node.children = []
-            node.innerClassName='hidden'
-            setattr(node, 'aria-hidden', '1')
+            node.popover_text = ""
         return node
+
+    def update_param_popover_text(self, node):
+        node.popover_text = f"{node.id} must be an integer or decimal number between 0-64",
+        return node
+
+    def render_popover(self, target_id, popover_text):
+        hide_popover = not bool(popover_text)
+        inner_class = 'hidden' if hide_popover else 'my_tooltip col-2'
+        popover = dbc.Tooltip(
+            target=target_id,
+            id=f'{target_id}_popover',
+            trigger='focus',
+            placement='right-start',
+            children=popover_text,
+            innerClassName=inner_class,
+            autohide=False,
+
+            hide_arrow=hide_popover,
+            className='update_filepath_popover'
+            #**{'aria-hidden': str(int(bool(hide_popover)))
+        )
+        # if node.children:
+        #     node.hide_arrow = 0
+        #     node.innerClassName='my_tooltip col-2'
+        #
+        #     setattr(node, 'aria-hidden', '0')
+        # else:
+        #     node.hide_arrow = 1
+        #     node.children = []
+        #     node.innerClassName='hidden'
+        #     setattr(node, 'aria-hidden', '1')
+        return popover
 
     @property
     def operators(self):
@@ -202,8 +244,8 @@ class InterferenceGenerator(Reactor):
         """Equivalent to setting
                  node.options = [{'value': 'TypeA', 'label': 'TypeA'},
                                  {'value': 'TypeB', 'label': 'TypeB } ...]
-           ...and so on. But it also dynamically sets this property, whose state
-           depends on the current output format."""
+           ...and so on. But it also dynamically sets this property, whose value
+           is derived from the current output format."""
         node.options = optionize(*self.interference_types)
         return node
 
@@ -236,9 +278,11 @@ class InterferenceGenerator(Reactor):
         return dbc.FormGroup([dbc.Col(node)], row=True)
 
     def labeled_form_group(self, node):
-        return dbc.Row(children=[dbc.Col(dbc.Label(children=[node.id]), width=2),
-                        dbc.Col(node, width=8)],
-                        **{"aria-hidden": getattr(node, "aria-hidden")})
+        row = [dbc.Col(dbc.Label(children=[node.id]), width=2),
+               dbc.Col(node, width=8)]
+        if hasattr(node, 'popover_text'):
+            row.append(self.render_popover(node.id, node.popover_text))
+        return dbc.Row(children=row, **{"aria-hidden": getattr(node, "aria-hidden")}, key=node.id)
 
     def prevent_invalid_submissions(self, node):
         ok = all(self.nodes[node_id].valid for node_id in self.visible_nodes)
@@ -259,13 +303,13 @@ class InterferenceGenerator(Reactor):
         return node
 
 
-if __name__ == "__main__":
+if True:
     nodes = generate_nodes()
     app_state = InterferenceGenerator(app, nodes)
 
 
     @app_state.app.callback(*app_state.callback_dependencies)
-    # @cache.memoize()
+    @cache.memoize(timeout=2)
     def callback(*args):
         return app_state.batched_callback(*args)
     # with open("/tmp/app82.dill", "wb") as f:
@@ -275,7 +319,7 @@ if __name__ == "__main__":
     for node in app_state.view:
         print(node)
     try:
-        app.run_server(port=8090, debug=True)
+        app.run_server(port=8090, debug=False, dev_tools_hot_reload=False, dev_tools_props_check=False, dev_tools_prune_errors=False, dev_tools_serve_dev_bundles=True)
     except OSError as e:
         pidofport(8089, killall=True)
         app.run_server(port=8090, debug=True)

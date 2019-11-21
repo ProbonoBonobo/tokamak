@@ -22,10 +22,11 @@ import dash
 from multiprocessing import RLock
 from dash.development.base_component import Component
 from typing import Tuple
+from tokamak.utils import to_serializable
 from flask_caching import Cache
 
 external_stylesheets = [dbc.themes.LUX]
-DEBUG = True
+DEBUG = False
 
 
 
@@ -46,6 +47,87 @@ def transformer(func):
 
     return wrapped
 
+
+def decorator_result( fname, env, func, result, error, error_msg="", serial_repr=None):
+    t = type(result)
+    if t is type:
+        t = result
+    class DecoratorResult(t):
+        def __init__(self, value):
+            self.timestamp = datetime.datetime.now()
+            self.fname = fname
+            self.env = env
+            self.func = func
+            self.result = value
+            self.error = error
+            self.error_msg = error_msg
+            self.serial_repr = serial_repr or str(self.result)
+            try:
+                super().__init__()
+            except:
+                super().__init__(self.result)
+        def serialize(self):
+            return json.dumps(self.__dict__, default=to_serializable)
+
+        def __repr__(self):
+            return self.serial_repr
+
+        def __hash__(self):
+            return self.serial_repr.__hash__()
+
+        def __gt__(self, other):
+            return self.timestamp > other.timestamp()
+
+        def __lt__(self, other):
+            return self.timestamp
+
+    return DecoratorResult(result)
+
+
+def transformer_v2(**dependencies):
+    env = {}
+    for k, v in dependencies.items():
+        env[k] = v
+    locals().update(env)
+    pp(env)
+
+    def _transformer(func):
+        fname = func.__name__
+        def inner(*args, **kwargs):
+            env.update(kwargs)
+            err = None
+            try:
+                result = func(*args, **env)
+            except Exception as e:
+                err = e
+                result = e
+            return decorator_result(env=env, func=func, result=result, error=err)
+        return inner
+    return _transformer
+
+
+def transformer_v3(**dependencies):
+    env = {}
+    for k, v in dependencies.items():
+        env[k] = v
+    locals().update(env)
+    pp(env)
+
+    def _transformer(func):
+        fname = func.__name__
+        def outer(*args, **kwargs):
+            env.update(kwargs)
+            err = None
+            def inner():
+                try:
+                    result = func(*args, **env)
+                except Exception as e:
+                    err = e
+                    result = e
+                return decorator_result(env=env, func=func, result=result, error=err)
+            return inner
+        return outer
+    return _transformer
 
 class IndexedDict(OrderedDict):
     """Like an OrderedDict, which it extends with an `index` method for checking the numeric index
@@ -211,7 +293,7 @@ class AtomicState(dcc.Store):
 
 
 class Reactor(object):
-
+    _last_update = datetime.datetime.now()
     _cache = {}
     _exec_times = defaultdict(float)
     _immutable_attrs = {
@@ -236,6 +318,7 @@ class Reactor(object):
         "inverse",
         "in-navbar"
     }
+
 
     def __init__(self, app, nodes, debug):
         self.DEBUG = debug
@@ -472,6 +555,9 @@ class Reactor(object):
 
     def _generate_callbacks(self):
         def _update_state(*args, targets=None, app_state=None, DEBUG=None):
+            if (datetime.datetime.now() - self._last_update).microseconds < 100000:
+                return no_update
+
             # print('Updating')
             has_update = False
             for target, value in zip(targets, args):
@@ -481,20 +567,21 @@ class Reactor(object):
                     has_update = True
                     app_state.submit_update(id, prop, value)
             if not has_update:
-                return no_update
-            has_update, updated_view = app_state.update_nodes()
+                updated_view = no_update
+            else:
+                self._last_update = datetime.datetime.now()
+                has_update, updated_view = app_state.update_nodes()
             # try:
             #     json.dumps(updated_view)
             # except Exception as e:
             #     print(f"Couldn't serialize view: {updated_view}")
-            if watchlist:
-                print(red("============= End of Update ==============="))
-                print(cyan("Watched node ids: ") + yellow(watchlist))
-                for node_id in watchlist:
-                    node = app_state.nodes[node_id]
+            # if watchlist:
+            #     print(red("============= End of Update ==============="))
+            #     print(cyan("Watched node ids: ") + yellow(watchlist))
+            #     for node_id in watchlist:
+            #         node = app_state.nodes[node_id]
 
                     # pp(node.to_plotly_json())
-
             return updated_view
 
         _scoped = partial(
@@ -626,7 +713,7 @@ class Reactor(object):
         has_update = False
         before = None
         try:
-            before = json.dumps(self.to_plotly_json(node)["props"], default=str)
+            before = node.__dict__
         except TypeError as e:
             print(
                 red(
@@ -652,9 +739,7 @@ class Reactor(object):
                     except Exception as e:
                         print(f"Got an unknown error: {e}. Not important, right?")
                 try:
-                    after = json.dumps(
-                        self.to_plotly_json(txnode)["props"], default=str
-                    )
+                    after = node.__dict__
                 except TypeError as e:
                     print(
                         red(
@@ -664,28 +749,27 @@ class Reactor(object):
                 has_update = before != after
                 before_dict, after_dict = None, None
                 changed_props = {}
-                if has_update:
-                    before_dict = json.loads(before)
-                    after_dict = json.loads(after)
+                if DEBUG and has_update:
+                    before_dict = before
+                    after_dict = after
                     # print(f"Before dict: {before_dict}")
                     changed_props = {
                         k: v
                         for k, v in before_dict.items()
                         if k not in after_dict or v != after_dict[k]
                     }
-                    if DEBUG:
-                        print(yellow(f"{'[ACQUIRED]':>16}") + grey("  ::  "), end="")
-                        print(
-                            cyan(node.id),
-                            f"locked by",
-                            cyan("TRANSFORMER"),
-                            f"pending {len(list(self.classmap[node.id]))} state transformations: {[meth.__name__ for meth in self.classmap[node.id]]}",
-                        )
-                        print(green(f"{'[RELEASED]':>16}") + grey("  ::  "), end="")
-                        print(
-                            cyan(node.id),
-                            f"modified {magenta(len(list(changed_props.keys())))} properties. ({magenta(list(changed_props.keys()))})",
-                        )
+                    print(yellow(f"{'[ACQUIRED]':>16}") + grey("  ::  "), end="")
+                    print(
+                        cyan(node.id),
+                        f"locked by",
+                        cyan("TRANSFORMER"),
+                        f"pending {len(list(self.classmap[node.id]))} state transformations: {[meth.__name__ for meth in self.classmap[node.id]]}",
+                    )
+                    print(green(f"{'[RELEASED]':>16}") + grey("  ::  "), end="")
+                    print(
+                        cyan(node.id),
+                        f"modified {magenta(len(list(changed_props.keys())))} properties. ({magenta(list(changed_props.keys()))})",
+                    )
                 self.semaphores[node.id].release()
 
             else:
@@ -727,3 +811,4 @@ class Reactor(object):
         self.app.run_server(
             port=port, debug=debug, dev_tools_hot_reload=False, **kwargs
         )
+

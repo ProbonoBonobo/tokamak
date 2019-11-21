@@ -4,6 +4,27 @@ import re
 from gemeinsprache.utils import *
 from functools import partial
 from collections import deque
+from datetime import datetime
+from functools import singledispatch
+from dash.development.base_component import Component
+
+@singledispatch
+def to_serializable(val):
+    """Used by default."""
+    return str(val)
+
+@to_serializable.register(datetime)
+def ts_datetime(val):
+    """Used if *val* is an instance of datetime."""
+    return val.isoformat()
+
+@to_serializable.register(Component)
+def plotly_json(val):
+    return val.to_plotly_json()
+
+@to_serializable.register(bool)
+def html_readable_bool(val):
+    return str(val).lower()
 
 
 def logger(prefix, prefix_color=cyan, default_color=green):
@@ -105,3 +126,4 @@ def conditional_breakpoint(assertion):
         pp({k:v for k,v in vars().items() if not k.startswith("_")})
         log(f"Breakpoint hit: {assertion} returned False.")
         breakpoint()
+

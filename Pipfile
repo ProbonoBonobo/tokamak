@@ -12,11 +12,11 @@ flask_caching = ">=1.7.2"
 dash_bootstrap_components = ">=0.7"
 dash_html_components = ">=1.0"
 dash_core_components = ">=1.5"
+dash_daq = ">=0.3.0"
 gemeinsprache = ">=0.0"
 termcolor = ">=1.1.0"
 codegen = ">=1.0"
 werkzeug = "*"
-dash-1-6-0 = {git = "git://github.com/ProbonoBonobo/dash.git"}
 
 [requires]
 python_version = "3.7"

@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "a61d46b0f2113fc51c4b3ee8198ca5593267f9bf77347e85a908b8366049197c"
+            "sha256": "ad900632095b63aa517d013a53deae00a1072bf46af1cc3b8c8af63d73a53a60"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -32,13 +32,9 @@
         },
         "dash": {
             "hashes": [
-                "sha256:264b0b4cb9fee14b7244a92b26dc47ba084e840bacb2fd70a3fa78ee581f830a"
+                "sha256:84fcc770e7fba4ddc867570b6527249dbcda2e0cc3989ea00b34d97b036d8a98"
             ],
-            "version": "==1.6.0"
-        },
-        "dash-1-6-0": {
-            "git": "git://github.com/ProbonoBonobo/dash.git",
-            "ref": "431d7edc285c92637a3da5c0c0e80cc086b2bb40"
+            "version": "==1.6.1"
         },
         "dash-bootstrap-components": {
             "hashes": [
@@ -49,29 +45,36 @@
         },
         "dash-core-components": {
             "hashes": [
-                "sha256:231131d2f01576c87971a1b7efb7beeaa859148a8c819b644c1998708ab44349"
+                "sha256:fadd16a2b4ea8abc60b72c08b5a9d6c1a86eb1f56e926be67773259f47eb9048"
             ],
             "index": "pypi",
-            "version": "==1.5.0"
+            "version": "==1.5.1"
+        },
+        "dash-daq": {
+            "hashes": [
+                "sha256:98ffce2946374140b630e9659f50262512a9f7adfa6ab22a88dac301d0b49208"
+            ],
+            "index": "pypi",
+            "version": "==0.3.1"
         },
         "dash-html-components": {
             "hashes": [
-                "sha256:7d7e80bf12635eb7d281fb0e7dd4b6e53f10dd57e3384ea5044c44ab16454fe4"
+                "sha256:8992097a044f5add21f86ccbe0caef8c499394a04d5f2b6cc4458a42f37cca98"
             ],
             "index": "pypi",
-            "version": "==1.0.1"
+            "version": "==1.0.2"
         },
         "dash-renderer": {
             "hashes": [
-                "sha256:73596cafab2018a6563ea055f3fc93f9be547022bbb08e102bd030514080cb25"
+                "sha256:4643d5f5c841080cc12c9b2bc090161d6bcb09d21f316307e43cd0a7b9025645"
             ],
-            "version": "==1.2.0"
+            "version": "==1.2.1"
         },
         "dash-table": {
             "hashes": [
-                "sha256:8b8d0e3cc24bf444f9a01ec6b2f9bb359dd3710a3107ebb405183d1e63dfc74a"
+                "sha256:f88623e478e2701a10aeee92a4b8adcc148ffb4943efab57143611c05a77f990"
             ],
-            "version": "==4.5.0"
+            "version": "==4.5.1"
         },
         "flask": {
             "hashes": [

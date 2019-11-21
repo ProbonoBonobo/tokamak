@@ -1,8 +1,10 @@
+import weakref
 from functools import partial
 import abc
 import inspect
 import sys
 from future.utils import with_metaclass
+
 
 from dash._utils import patch_collections_abc
 import random
@@ -80,10 +82,24 @@ class Component(with_metaclass(ComponentMeta, object)):
 
     REQUIRED = _REQUIRED()
 
+    __cache = weakref.WeakValueDictionary()
+
+
+
     def __init__(self, **kwargs):
+        # print(f"Init called with args: {locals()}")
         # pylint: disable=super-init-not-called
         # del self._valid_wildcard_attributes
         # del self._prop_names
+        self.__dict__.update(kwargs)
+        # if 'id' in kwargs:
+        #
+        #     if kwargs['id'] in self.__cache:
+        #         for k,v in self.__cache[kwargs['id']].__dict__.items():
+        #             setattr(self, k, v)
+        #     else:
+        #         self.__cache[kwargs['id']] = self
+            # globals()[self.id] = self
         _dynamic_props = {}
         try:
             _prop_names = list(self._prop_names)
@@ -106,6 +122,8 @@ class Component(with_metaclass(ComponentMeta, object)):
 
         self._dynamic_props = _dynamic_props
         self._prop_names = tuple(_prop_names)
+        if hasattr(self, 'id'):
+            self.__cache[self.id] = self
 
     def to_plotly_json(self):
         # Add normal properties
@@ -406,6 +424,6 @@ def _explicitize_args(func):
         wrapper.__signature__ = new_sig
     return wrapper
 if __name__ == '__main__':
-    import dash_core_components as dcc
-    foo = dcc.Input(id="foo", value=lambda self: random.randrange(0,1000), **{"aria-footest": "bar"})
+    import dash_bootstrap_components as dbc
+    foo = dbc.Input(id="foo", value=lambda self: random.randrange(0,1000), **{"aria-footest": "bar"})
 
