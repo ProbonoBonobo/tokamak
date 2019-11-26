@@ -45,7 +45,8 @@ class State:
 
 
     def render(self):
-        return dbc.Container([
+        return dbc.Div([html.P(id='uuid'),
+                       dbc.Container([
             dbc.Row([
                 dbc.Col([
                     html.H1(id='clock', children=self.timer.isoformat(), style={"color": self.time_color})
@@ -57,6 +58,7 @@ class State:
                 ])
             ])
         ])
+                        ])
 
 state = State()
 app.layout = html.Div(
@@ -72,5 +74,5 @@ def callback(_, color, state=state):
 
 
 
-# app.run_server(port=8888, debug=True)
+app.run_server(port=8888, debug=True)
 

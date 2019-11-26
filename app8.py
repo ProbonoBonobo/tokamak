@@ -1,6 +1,8 @@
 from functools import reduce
-from tokamak.models import Reactor, transformer, default_props
+from tokamak.models import Reactor, transformer, renderer, default_props
 from tokamak.utils import pidofport
+import re
+import dash_daq as daq
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 from werkzeug.serving import WSGIRequestHandler
@@ -19,34 +21,40 @@ import dash_html_components as html
 from dash.dependencies import Input, Output
 from flask_caching import Cache
 from dash import no_update
+from itertools import zip_longest
+
+
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into fixed-length chunks or blocks"
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
+    args = [iter(iterable)] * n
+    return zip_longest(*args, fillvalue=fillvalue)
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css', dbc.themes.BOOTSTRAP, dbc.themes.LUX]
 
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
-cache = Cache(app.server, config={
-    # try 'filesystem' if you don't want to setup redis
-    'CACHE_TYPE': 'filesystem',
-    'CACHE_DIR': "/tmp"
-})
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True, compress=True, include_assets_files=True)
+# cache = Cache(app.server, config={
+#     # try 'filesystem' if you don't want to setup redis
+#     'CACHE_TYPE': 'redis',
+#     'CACHE_DIR': "/tmp"
+# })
 app.config.suppress_callback_exceptions = True
 server = app.server
 
-DEBUG = True
+DEBUG = False
 timeout = 20
 
 
 CACHE_CONFIG = {
     # try 'filesystem' if you don't want to setup redis
-    'CACHE_TYPE': 'redis',
+    'CACHE_TYPE': 'filesystem',
+    'CACHE_DIR': '/tmp/redis',
     'CACHE_REDIS_URL': os.environ.get('REDIS_URL', 'redis://localhost:6379')
 }
-cache = Cache()
-cache.init_app(app.server, config=CACHE_CONFIG)
+# os.makedirs(CACHE_CONFIG['CACHE_DIR'])
+# cache = Cache()
+# cache.init_app(app.server, config=CACHE_CONFIG)
 
-
-@cache.memoize(timeout=1)
-def global_store(*args, **kwargs):
-    return InterferenceGenerator(*args, **kwargs)
 
 def optionize(*args):
     return [{"label": option, "value": option} for option in args]
@@ -55,7 +63,6 @@ def optionize(*args):
 @default_props({'aria-hidden': '0',
                 'aria-label': lambda node: node.id,
                 'valid': lambda node: isinstance(node, dcc.Dropdown)})
-@cache.memoize(timeout=1)
 def generate_nodes():
     nodes = [
         dcc.Dropdown(
@@ -76,8 +83,6 @@ def generate_nodes():
             className="validate_file_path update_file_path_popover_text",
             spellcheck="false"
         ),
-
-
         dcc.Dropdown(
             id="interference_type",
             value="TypeA",
@@ -85,24 +90,30 @@ def generate_nodes():
             renderer="labeled_form_group",
             valid=True,
             className="update_interference_options"
-
         ),
         *[
-
         dbc.Input(
                 id=f"Param{i}",
-                popover_text="",
+                popover_text=f"Param{i} must be an integer or decimal number between 0-64",
                 type="number",
                 valid=False,
                 value=0.0,
                 min=0,
                 max=64,
                 renderer="labeled_form_group",
-                className="update_param_popover_text update_param_visibility validate_param",
+                className="update_param_visibility validate_param",
                 **{"aria-hidden": "1"},
             )
             for i in range(1, 14)
-        ], *[
+        ],*[
+                daq.BooleanSwitch(
+                    id=id,
+                    _label= re.sub(r"(\w)([A-Z])", r"\1 \2", id) + "?",
+                    className='boolswitch',
+                    on=False
+                ) for id in ['UseBandpassData', 'UseBlankingAvgPower', 'AlignedBlankingPeriod', 'SpecifyStartingPhase', 'ContinuousPhase']
+        ],
+        *[
             dbc.Button(
                 id="submit",
                 children="submit",
@@ -115,23 +126,23 @@ def generate_nodes():
                 children="",
                 className="update_submit_msg"
             )
-        ]]
+        ],
+
+    ]
 
     return nodes
 
 
-# @cache.memoize(timeout=1)
 class InterferenceGenerator(Reactor):
 
-
     def __init__(self, app, nodes):
-
         # Individual parameters are always observable, but may not always be
         # visible. Visible nodes are more or less like eigenstates, in that their
         # visibility can't be manipulated directly by the browser and it's purely a
         # function of the currently selected options.
-
-        self._invariants = {"file_path", "file_type", "interference_type"}
+        self._bool_switch_ids = set([id for id, node in nodes.items() if isinstance(node, daq.BooleanSwitch)])
+        self._footer_ids = ['submit', 'clicks']
+        self._invariants = {"file_path", "file_type", "interference_type", 'UseBandpassData', 'UseBlankingAvgPower', 'AlignedBlankingPeriod', 'SpecifyStartingPhase', 'ContinuousPhase'}
         self._operators = ['file_type', 'interference_type']
         self.eigenstates = {
             "MAT": {
@@ -154,10 +165,8 @@ class InterferenceGenerator(Reactor):
                 "TypeE": ("Param10", "Param13", "Param7"),
             },
         }
-
         # for filepath validation
         self.required_ext = {"MAT": ".m", "PCAP": ".pcap", "AWG": ".wfm"}
-
         # cons the always-visible ids to each of the application's visible states
         for ftype, istates in self.eigenstates.items():
             for bra, ket in istates.items():
@@ -168,8 +177,8 @@ class InterferenceGenerator(Reactor):
         #    2. nodes to matching renderer methods (if any) contained in 'renderer' property;
         #    3. matching transformer/renderer methods to the bundled application
         #      callback, to be executed sequentially on each clientside state update.
-
         super().__init__(app, nodes, DEBUG)
+
 
 
     def hide(self, node):
@@ -179,7 +188,6 @@ class InterferenceGenerator(Reactor):
     def unhide(self, node):
         setattr(node, "aria-hidden", "0")
         return node
-
 
     def update_file_path_popover_text(self, node):
         required_postfix = self.required_ext[self.nodes.file_type.value]
@@ -191,10 +199,7 @@ class InterferenceGenerator(Reactor):
             node.popover_text = ""
         return node
 
-    def update_param_popover_text(self, node):
-        node.popover_text = f"{node.id} must be an integer or decimal number between 0-64",
-        return node
-
+    # @cache.memoize(timeout=10)
     def render_popover(self, target_id, popover_text):
         hide_popover = not bool(popover_text)
         inner_class = 'hidden' if hide_popover else 'my_tooltip col-2'
@@ -206,27 +211,14 @@ class InterferenceGenerator(Reactor):
             children=popover_text,
             innerClassName=inner_class,
             autohide=False,
-
             hide_arrow=hide_popover,
             className='update_filepath_popover'
-            #**{'aria-hidden': str(int(bool(hide_popover)))
         )
-        # if node.children:
-        #     node.hide_arrow = 0
-        #     node.innerClassName='my_tooltip col-2'
-        #
-        #     setattr(node, 'aria-hidden', '0')
-        # else:
-        #     node.hide_arrow = 1
-        #     node.children = []
-        #     node.innerClassName='hidden'
-        #     setattr(node, 'aria-hidden', '1')
         return popover
 
     @property
     def operators(self):
         return [self.nodes[operator_id] for operator_id in self._operators]
-
 
     @property
     def visible_nodes(self):
@@ -272,10 +264,10 @@ class InterferenceGenerator(Reactor):
 
     @property
     def view(self):
-        return [self.render(node) for id, node in self.nodes.items()]
-
-    def identity(self, node):
-        return dbc.FormGroup([dbc.Col(node)], row=True)
+        head = [self.render(node) for id, node in self.nodes.items() if id not in self._bool_switch_ids and id not in self._footer_ids]
+        switches = [self.labeled_button_cards()]
+        footer = [self.render(node) for id, node in self.nodes.items() if id in self._footer_ids]
+        return head + switches + footer
 
     def labeled_form_group(self, node):
         row = [dbc.Col(dbc.Label(children=[node.id]), width=2),
@@ -283,13 +275,35 @@ class InterferenceGenerator(Reactor):
         if hasattr(node, 'popover_text'):
             row.append(self.render_popover(node.id, node.popover_text))
         return dbc.Row(children=row, **{"aria-hidden": getattr(node, "aria-hidden")}, key=node.id)
+    def labeled_button_cards(self):
+        rows = dbc.Container(children=[], fluid=False, className='bool-switch-container')
+        for nodelist in grouper([self.nodes[id] for id in self._bool_switch_ids], 5):
+            nodelist = [node for node in nodelist if isinstance(node, daq.BooleanSwitch)]
+            nodecount = len(nodelist)
+            width = int(12 / nodecount if nodecount else 12)
+            row = dbc.CardGroup(
+                [dbc.Card(dbc.CardBody(
+                    [html.H4(node._label, className='param-label'), node]),  enabled="1" if node.on else "0", className='param-card')
+                    for node in nodelist],
+                className='bool-switch-cardgroup')
 
-    def prevent_invalid_submissions(self, node):
-        ok = all(self.nodes[node_id].valid for node_id in self.visible_nodes)
-        node.disabled = not bool(ok)
-        node.active = bool(ok)
-        return node
-    
+            for node in nodelist:
+                if hasattr(node, 'popover_text'):
+                    row.append(self.render_popover(node.id, node.popover_text))
+            rows.children.append(row)
+        return rows
+    def labeled_buttons(self):
+        rows = dbc.Container(children=[], fluid=False, className='bool-switch-container')
+        for nodelist in grouper([self.nodes[id] for id in self._bool_switch_ids], 3):
+            nodecount = len([node for node in nodelist if isinstance(node, daq.BooleanSwitch)])
+            width = int(12 / nodecount if nodecount else 12)
+            row = dbc.Row([dbc.Col(node, width=width) for node in nodelist], className='bool-switch-row')
+            for node in nodelist:
+                if hasattr(node, 'popover_text'):
+                    row.append(self.render_popover(node.id, node.popover_text))
+            rows.children.append(row)
+        return rows
+
     def to_dict(self):
         return {node_id: self.nodes[node_id].value or 0 for node_id in sorted(self.visible_nodes, reverse=True)}
     
@@ -299,27 +313,19 @@ class InterferenceGenerator(Reactor):
             indent=4,
             sort_keys=True
         ), '```'])
-
         return node
 
 
-if True:
+if __name__ == '__main__':
     nodes = generate_nodes()
     app_state = InterferenceGenerator(app, nodes)
-
-
-    @app_state.app.callback(*app_state.callback_dependencies)
-    @cache.memoize(timeout=2)
-    def callback(*args):
-        return app_state.batched_callback(*args)
-    # with open("/tmp/app82.dill", "wb") as f:
-    #     ser = json.loads(app_state.__str__())
-    #     dill.dump(ser, f)
-
-    for node in app_state.view:
-        print(node)
     try:
-        app.run_server(port=8090, debug=False, dev_tools_hot_reload=False, dev_tools_props_check=False, dev_tools_prune_errors=False, dev_tools_serve_dev_bundles=True)
+        app.run_server(port=8090,
+                       debug=False,
+                       dev_tools_hot_reload=False,
+                       dev_tools_props_check=False,
+                       dev_tools_prune_errors=True,
+                       dev_tools_serve_dev_bundles=True)
     except OSError as e:
         pidofport(8089, killall=True)
         app.run_server(port=8090, debug=True)

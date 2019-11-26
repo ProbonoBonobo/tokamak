@@ -60,6 +60,8 @@ def apply_hotfixes():
     its_hash = get_md5_hash(path_to_base_component)
     required_hash = get_md5_hash(path_to_base_component_override)
     base_component_needs_override = bool(its_hash != required_hash)
+    if not base_component_needs_override:
+        return True
     color = red if base_component_needs_override else green
     log(f"    Resolved filepath: {path_to_base_component}")
     log(f"    Resolved md5 hash: {its_hash}")
@@ -68,8 +70,6 @@ def apply_hotfixes():
     if base_component_needs_override:
         new_contents = get_content(path_to_base_component_override)
         before, after, has_changed = overwrite(path_to_base_component, new_contents)
-    else:
-        after = its_hash
     from dash.development.base_component import Component
     source = inspect.getsource(Component)
     log(f"Source code of Component is now:")

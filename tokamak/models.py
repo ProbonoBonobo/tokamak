@@ -6,7 +6,7 @@ try:
     apply_hotfixes()
 except Exception as e:
     print(f"Error applying hotfixes: {e.__class__.__name__} :: {e}")
-
+from tokamak.utils import logger
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 import random
@@ -24,11 +24,12 @@ from dash.development.base_component import Component
 from typing import Tuple
 from tokamak.utils import to_serializable
 from flask_caching import Cache
+import functools
 
 external_stylesheets = [dbc.themes.LUX]
 DEBUG = False
 
-
+log = logger('[ models.py ]', default_color=red)
 
 watchlist = []
 ignored = []
@@ -39,12 +40,18 @@ _mtimes = defaultdict(lambda: datetime.datetime.fromordinal(1))
 
 def transformer(func):
     funcname = func.__name__
-    print(f"{funcname} args:")
-    pp(vars())
+    # @functools.wraps
     def wrapped(*args, **kwargs):
         value = func(*args, **kwargs)
         return value
+    return wrapped
 
+def renderer(func):
+    funcname = func.__name__
+
+    def wrapped(*args, **kwargs):
+        value = func(*args, **kwargs)
+        return value
     return wrapped
 
 
@@ -320,8 +327,10 @@ class Reactor(object):
     }
 
 
-    def __init__(self, app, nodes, debug):
+    def __init__(self, app, nodes, debug=DEBUG, cache=None, cache_timeout=10):
         self.DEBUG = debug
+        self.cache = cache
+        self.cache_timeout = cache_timeout
         if hasattr(self, "nodes"):
             raise RuntimeError(
                 red(
@@ -401,7 +410,15 @@ class Reactor(object):
             self.classmap[node.id] = methods
         self.app = self._set_initial_layout(app)
         self._generate_callbacks()
-
+        if self.cache:
+            @self.app.callback(*self.callback_dependencies)
+            @cache.memoize(timeout=1)
+            def callback(*args):
+                return self.batched_callback(*args)
+        else:
+            @self.app.callback(*self.callback_dependencies)
+            def callback(*args):
+                return self.batched_callback(*args)
 
 
     def validate_transformer(self, node, tx_name):
@@ -695,9 +712,9 @@ class Reactor(object):
                     f"\n ================= Node {green(id)} has updated ================== "
                 )
                 print(f"\n{green('Before:')}")
-                pp(json.loads(state_before))
+                pp(state_before)
                 print(green("\n\nAfter:"))
-                pp(json.loads(state_after))
+                pp(state_after)
                 print(
                     f"\n ================= Node {green(id)} has updated ================== "
                 )
@@ -713,7 +730,7 @@ class Reactor(object):
         has_update = False
         before = None
         try:
-            before = node.__dict__
+            before = node.to_plotly_json()
         except TypeError as e:
             print(
                 red(
@@ -732,14 +749,18 @@ class Reactor(object):
                 for tx in self.classmap[node.id]:
                     try:
                         txnode = tx(txnode)
-                    except AttributeError as e:
-                        # Probably just a formatting option, move along
-                        print(f"Got an attribute error: {e}. Not important, right?")
-                        pass
                     except Exception as e:
-                        print(f"Got an unknown error: {e}. Not important, right?")
+                        msg = f"{e.__class__.__name__} : {tx.__name__} failed to transform the following node:\n\n        {repr(txnode)}\n\nError message: {e}"
+                        log(msg)
+
+                    # except AttributeError as e:
+                    #     # Probably just a formatting option, move along
+                    #     print(f"Got an attribute error: {e}. Not important, right?")
+                    #     pass
+                    # except Exception as e:
+                    #     print(f"Got an unknown error: {e}. Not important, right?")
                 try:
-                    after = node.__dict__
+                    after = txnode.to_plotly_json()
                 except TypeError as e:
                     print(
                         red(

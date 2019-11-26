@@ -1,6 +1,20 @@
 @font-face {
     font-family: "Not My Local Input Mono";
-    src: url("/input-mono-narrow-light.woff") format("woff");
+    src: url("/assets/InputMono-Light.woff") format("woff");
+    font-weight: 200;
+    font-style: normal;
+}
+@font-face {
+    font-family: "Not My Local Input Mono";
+    src: url("/assets/InputMono-Regular.woff") format("woff");
+    font-weight: 500;
+    font-style: normal;
+}
+@font-face {
+    font-family: "Not My Local Input Mono";
+    src: url("/assets/InputMono-Black.woff") format("woff");
+    font-weight: 800;
+    font-style: normal;
 }
 
 [aria-hidden="1"],
@@ -44,3 +58,71 @@ input:invalid {
 label { font-size: 12px;   }
 
 .col-8 { font-size: 12px; font-family: "Not My Local Input Mono", "monospace"; }
+
+.tooltip-inner {
+    position: absolute;
+    min-width: 16.665vw;
+    max-width: 186px;
+}
+.bool-switch-container {
+    padding: 61.8px 0 38.2px 0 !important;
+    /*background: #eeeeee;*/
+    /*border: darkgray 1px solid;*/
+    /*border-radius: 5px;*/
+}
+.bool-switch-cardgroup {
+    height: 100%;
+    align-items: stretch;
+    flex-flow: row nowrap;
+    align-self: stretch;
+    align-content: stretch;
+    justify-items: stretch;
+    justify-content: stretch;
+    /*flex-grow: 1;*/
+    /*justify-content: stretch;*/
+    /*justify-self: stretch;*/
+    /*align-content: stretch;*/
+    /*align-items: stretch;*/
+}
+.bool-switch-row {
+    margin: 0 0 38.2px 0  !important;
+}
+.boolswitch {
+    background: #fff;
+}
+.param-label {
+   font-size: 16px;
+    font-weight: 200;
+    letter-spacing: -0.05px;
+    font-family: "Not My Local Input Mono", "monospace";
+    /*text-transform: none !important;*/
+    /*font-style: oblique;*/
+}
+.param-card, .card-body {
+    min-height: 100%;
+    position: relative;
+    display: inline-flex;
+    flex-flow: column nowrap;
+
+    padding: 9px 14.5px;
+    align-self: center;
+    align-content: space-between;
+    align-items: center;
+    justify-content: space-between;
+    flex-grow: 1;
+}
+.param-label {
+    margin: 0 auto 14.5px auto;
+    text-align: center;
+}
+.boolswitch {
+    position: relative;
+    float: bottom;
+}
+
+[enabled="0"], [enabled="0"] > *, [enabled="0"] > * > * {
+    background: hsl(0, 38%, 85%);
+}
+[enabled="1"], [enabled="1"] > *, [enabled="1"] > * > * {
+    background: hsla(140, 40%, 86%, 1);
+}
