@@ -320,7 +320,7 @@ class InterferenceGenerator(Reactor):
 nodes = generate_nodes()
 app_state = InterferenceGenerator(app, nodes)
 is_prod = os.getenv("PROD", 0)
-if is_prod:
+if not is_prod:
     try:
         app.run_server(port=8090,
                    debug=False,
