@@ -110,6 +110,7 @@ def generate_nodes():
                     id=id,
                     _label= re.sub(r"(\w)([A-Z])", r"\1 \2", id) + "?",
                     className='boolswitch',
+                    renderer='identity',
                     on=False
                 ) for id in ['UseBandpassData', 'UseBlankingAvgPower', 'AlignedBlankingPeriod', 'SpecifyStartingPhase', 'ContinuousPhase']
         ],
