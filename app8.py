@@ -317,21 +317,22 @@ class InterferenceGenerator(Reactor):
         return node
 
 
-if __name__ == '__main__':
-    nodes = generate_nodes()
-    app_state = InterferenceGenerator(app, nodes)
+nodes = generate_nodes()
+app_state = InterferenceGenerator(app, nodes)
+is_prod = os.getenv("PROD", 0)
+if is_prod:
     try:
         app.run_server(port=8090,
-                       debug=False,
-                       dev_tools_hot_reload=False,
-                       dev_tools_props_check=False,
-                       dev_tools_prune_errors=True,
-                       dev_tools_serve_dev_bundles=True)
+                   debug=False,
+                   dev_tools_hot_reload=False,
+                   dev_tools_props_check=False,
+                   dev_tools_prune_errors=True,
+                   dev_tools_serve_dev_bundles=True)
     except OSError as e:
         pidofport(8089, killall=True)
         app.run_server(port=8090,
-                       debug=False,
-                       dev_tools_hot_reload=False,
-                       dev_tools_props_check=False,
-                       dev_tools_prune_errors=True,
-                       dev_tools_serve_dev_bundles=True)
+                   debug=False,
+                   dev_tools_hot_reload=False,
+                   dev_tools_props_check=False,
+                   dev_tools_prune_errors=True,
+                   dev_tools_serve_dev_bundles=True)
