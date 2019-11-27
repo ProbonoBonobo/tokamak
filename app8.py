@@ -32,7 +32,7 @@ def grouper(iterable, n, fillvalue=None):
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css', dbc.themes.BOOTSTRAP, dbc.themes.LUX]
 
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True, compress=True, include_assets_files=True)
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True, serve_locally=False, include_assets_files=True)
 # cache = Cache(app.server, config={
 #     # try 'filesystem' if you don't want to setup redis
 #     'CACHE_TYPE': 'redis',
@@ -328,4 +328,9 @@ if __name__ == '__main__':
                        dev_tools_serve_dev_bundles=True)
     except OSError as e:
         pidofport(8089, killall=True)
-        app.run_server(port=8090, debug=True)
+        app.run_server(port=8090,
+                       debug=False,
+                       dev_tools_hot_reload=False,
+                       dev_tools_props_check=False,
+                       dev_tools_prune_errors=True,
+                       dev_tools_serve_dev_bundles=True)
