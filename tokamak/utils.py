@@ -39,18 +39,27 @@ def logger(prefix, prefix_color=cyan, default_color=green):
         available_len = w - prefix_len
         formatted = []
         words = deque(msg.split(" "))
-        while words:
-            _msg = ""
-            while len(_msg) < available_len:
-                try:
-                    _msg += f"{words.popleft()} "
-                except IndexError:
-                    break
-            _pref = prefix if len(formatted) == 0 else " " * prefix_len
-            formatted.append(_pref + color(_msg))
+        _msg = ""
+        _pref = prefix if len(formatted) == 0 else " " * prefix_len
+        for word in words:
 
-        formatted = '\n'.join(formatted)
-        print(formatted)
+            if len(_msg) + len(word) <= available_len:
+                _msg += f"{word} "
+            else:
+
+                formatted.append(_msg)
+                _msg = ""
+                _msg += f"{word}"
+        formatted.append(_msg)
+
+        for i, line in enumerate(formatted):
+            if i is 0:
+                _pref = prefix
+            else:
+                _pref = " " * prefix_len
+
+            print(prefix_color(_pref) + "  " + color(line))
+
     return partial(log, prefix=prefix)
 
 def pp(obj):
