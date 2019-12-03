@@ -276,6 +276,7 @@ class InterferenceGenerator(Reactor):
         if hasattr(node, 'popover_text'):
             row.append(self.render_popover(node.id, node.popover_text))
         return dbc.Row(children=row, **{"aria-hidden": getattr(node, "aria-hidden")}, key=node.id)
+
     def labeled_button_cards(self):
         rows = dbc.Container(children=[], fluid=False, className='bool-switch-container')
         for nodelist in grouper([self.nodes[id] for id in self._bool_switch_ids], 5):
@@ -289,21 +290,12 @@ class InterferenceGenerator(Reactor):
                 className='bool-switch-cardgroup')
 
             for node in nodelist:
+                node.value = node.on
                 if hasattr(node, 'popover_text'):
                     row.append(self.render_popover(node.id, node.popover_text))
             rows.children.append(row)
         return rows
-    def labeled_buttons(self):
-        rows = dbc.Container(children=[], fluid=False, className='bool-switch-container')
-        for nodelist in grouper([self.nodes[id] for id in self._bool_switch_ids], 3):
-            nodecount = len([node for node in nodelist if isinstance(node, daq.BooleanSwitch)])
-            width = int(12 / nodecount if nodecount else 12)
-            row = dbc.Row([dbc.Col(node, width=width) for node in nodelist], className='bool-switch-row')
-            for node in nodelist:
-                if hasattr(node, 'popover_text'):
-                    row.append(self.render_popover(node.id, node.popover_text))
-            rows.children.append(row)
-        return rows
+
 
     def to_dict(self):
         return {node_id: self.nodes[node_id].value or 0 for node_id in sorted(self.visible_nodes, reverse=True)}
