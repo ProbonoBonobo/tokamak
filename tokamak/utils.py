@@ -3,10 +3,11 @@ import sys
 import re
 from gemeinsprache.utils import *
 from functools import partial
-from collections import deque
+from collections import deque, OrderedDict
 from datetime import datetime
 from functools import singledispatch
 from dash.development.base_component import Component
+import numbers
 
 @singledispatch
 def to_serializable(val):
@@ -25,6 +26,31 @@ def plotly_json(val):
 @to_serializable.register(bool)
 def html_readable_bool(val):
     return str(val).lower()
+
+def numeric(val):
+    return isinstance(val, numbers.Number)
+
+class IndexedDict(OrderedDict):
+    def __init__(self, mapping={}):
+        self.data = OrderedDict(mapping)
+        self._keyseq = list(self.data.keys())
+        super().__init__()
+    def __getitem__(self, item):
+        if numeric(item):
+            return self.data[self._keyseq[item]]
+        return self.data[item]
+    def __setitem__(self, key, value):
+        if key not in self._keyseq:
+            self._keyseq.append(key)
+        self.data[key] = value
+    def __delitem__(self, key):
+        if numeric(key):
+            key = self._keyseq[key]
+        self._keyseq.remove(key)
+        del self.data[key]
+    @property
+    def count(self):
+        return len(self._keyseq)
 
 
 def logger(prefix, prefix_color=cyan, default_color=green):
@@ -136,3 +162,13 @@ def conditional_breakpoint(assertion):
         log(f"Breakpoint hit: {assertion} returned False.")
         breakpoint()
 
+if __name__ == '__main__':
+    data = {"hello": "world", "foo": "bar", "bar": "bees"}
+    d = IndexedDict(data)
+    print(d.__dict__)
+    print(d[0])
+    print(d['hello'])
+    print(d.__dict__)
+    del d['hello']
+    print(d.__dict__)
+    print(d[0])

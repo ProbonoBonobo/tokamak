@@ -1,6 +1,6 @@
 from functools import reduce
 from tokamak.models import Reactor, transformer, renderer, default_props
-from tokamak.utils import pidofport
+from tokamak.utils import pidofport, IndexedDict
 import re
 import dash_daq as daq
 import dash_bootstrap_components as dbc
@@ -22,7 +22,8 @@ from dash.dependencies import Input, Output
 from flask_caching import Cache
 from dash import no_update
 from itertools import zip_longest
-
+from numbers import Number
+from tokamak.parameters import parameters
 
 def grouper(iterable, n, fillvalue=None):
     "Collect data into fixed-length chunks or blocks"
@@ -56,6 +57,29 @@ CACHE_CONFIG = {
 # cache.init_app(app.server, config=CACHE_CONFIG)
 
 
+for parameter in parameters:
+    globals()[parameter.name] = parameter
+
+# print(parameter.num_samples)
+# print(num_samples)
+
+#
+# print(parameter.num_samples is num_samples)
+# parameter.num_samples = 6
+# print(parameter.num_samples)
+# print(num_samples)
+# num_samples = 12
+# print(parameter.num_samples)
+# print(num_samples)
+# print(Parameter.__dict__)
+# print(parameter.steps_per_chirp)
+# breakpoint()
+# steps_per_chirp.to_matlab()
+# steps_per_chirp = 11
+# print(steps_per_chirp.__dict__)
+
+
+
 def optionize(*args):
     return [{"label": option, "value": option} for option in args]
 
@@ -85,27 +109,14 @@ def generate_nodes():
         ),
         dcc.Dropdown(
             id="interference_type",
-            value="TypeA",
-            options=optionize("TypeA", "TypeB", "TypeC", "TypeD", "TypeE"),
+            value="CW",
+            options=optionize("CW", "hop", "chirp", "stepchirp", "randFM"),
             renderer="labeled_form_group",
             valid=True,
             className="update_interference_options"
         ),
+        *parameters,
         *[
-        dbc.Input(
-                id=f"Param{i}",
-                popover_text=f"Param{i} must be an integer or decimal number between 0-64",
-                type="number",
-                valid=False,
-                value=0.0,
-                min=0,
-                max=64,
-                renderer="labeled_form_group",
-                className="update_param_visibility validate_param",
-                **{"aria-hidden": "1"},
-            )
-            for i in range(1, 14)
-        ],*[
                 daq.BooleanSwitch(
                     id=id,
                     _label= re.sub(r"(\w)([A-Z])", r"\1 \2", id) + "?",
@@ -143,27 +154,30 @@ class InterferenceGenerator(Reactor):
         # function of the currently selected options.
         self._bool_switch_ids = set([id for id, node in nodes.items() if isinstance(node, daq.BooleanSwitch)])
         self._footer_ids = ['submit', 'clicks']
-        self._invariants = {"file_path", "file_type", "interference_type", 'UseBandpassData', 'UseBlankingAvgPower', 'AlignedBlankingPeriod', 'SpecifyStartingPhase', 'ContinuousPhase'}
+
+        self._invariants = {"file_path", "file_type", "interference_type", 'UseBandpassData', 'UseBlankingAvgPower',
+                            'AlignedBlankingPeriod', 'SpecifyStartingPhase'}
+
         self._operators = ['file_type', 'interference_type']
         self.eigenstates = {
             "MAT": {
-                "TypeA": ("Param1", "Param4"),
-                "TypeB": ("Param2", "Param3"),
-                "TypeC": ("Param3", "Param5", "Param8", "Param9"),
-                "TypeD": ("Param2", "Param4", "Param5", "Param8", "Param9"),
-                "TypeE": ("Param2", "Param6", "Param7"),
+                "CW": ("Fs", "CWfreqOffset"),
+                "hop": ("Nhops", "BandwidthDenominator"),
+                "chirp": ("BandwidthDenominator", "Nsweeps", "Nchirps", "ContinuousPhase", "RandomStartFreq"),
+                "stepchirp": ("BandwidthDenominator", "Nsweeps", "StepsPerChirp", "ContinuousPhase", "RandomStartFreq"),
+                "randFM": ("BandwidthDenominator", "RandomFMMovingAverage", "RandomFMCentering"),
             },
             "AWG": {
-                "TypeB": ("Param10", "Param11"),
-                "TypeC": ("Param10", "Param12"),
-                "TypeD": ("Param10", "Param12", "Param5"),
-                "TypeE": ("Param10", "Param13", "Param7"),
+                "hop": ("Bandwidth", "DwellTime"),
+                "chirp": ("Bandwidth", "ChirpRate"),
+                "stepchirp": ("Bandwidth", "ChirpRate", "Nsweeps"),
+                "randFM": ("Bandwidth", "MovingAvgLength", "RandomFMCentering"),
             },
             "PCAP": {
-                "TypeB": ("Param10", "Param11"),
-                "TypeC": ("Param10", "Param12"),
-                "TypeD": ("Param10", "Param12", "Param5"),
-                "TypeE": ("Param10", "Param13", "Param7"),
+                "hop": ("Bandwidth", "DwellTime"),
+                "chirp": ("Bandwidth", "ChirpRate"),
+                "stepchirp": ("Bandwidth", "ChirpRate", "Nsweeps"),
+                "randFM": ("Bandwidth", "MovingAvgLength", "RandomFMCentering"),
             },
         }
         # for filepath validation
@@ -235,8 +249,8 @@ class InterferenceGenerator(Reactor):
     @transformer
     def update_interference_options(self, node):
         """Equivalent to setting
-                 node.options = [{'value': 'TypeA', 'label': 'TypeA'},
-                                 {'value': 'TypeB', 'label': 'TypeB } ...]
+                 node.options = [{'value': 'CW', 'label': 'CW'},
+                                 {'value': 'hop', 'label': 'hop } ...]
            ...and so on. But it also dynamically sets this property, whose value
            is derived from the current output format."""
         node.options = optionize(*self.interference_types)
@@ -276,7 +290,6 @@ class InterferenceGenerator(Reactor):
         if hasattr(node, 'popover_text'):
             row.append(self.render_popover(node.id, node.popover_text))
         return dbc.Row(children=row, **{"aria-hidden": getattr(node, "aria-hidden")}, key=node.id)
-
     def labeled_button_cards(self):
         rows = dbc.Container(children=[], fluid=False, className='bool-switch-container')
         for nodelist in grouper([self.nodes[id] for id in self._bool_switch_ids], 5):
@@ -290,16 +303,25 @@ class InterferenceGenerator(Reactor):
                 className='bool-switch-cardgroup')
 
             for node in nodelist:
-                node.value = node.on
+                if hasattr(node, 'popover_text'):
+                    row.append(self.render_popover(node.id, node.popover_text))
+            rows.children.append(row)
+        return rows
+    def labeled_buttons(self):
+        rows = dbc.Container(children=[], fluid=False, className='bool-switch-container')
+        for nodelist in grouper([self.nodes[id] for id in self._bool_switch_ids], 3):
+            nodecount = len([node for node in nodelist if isinstance(node, daq.BooleanSwitch)])
+            width = int(12 / nodecount if nodecount else 12)
+            row = dbc.Row([dbc.Col(node, width=width) for node in nodelist], className='bool-switch-row')
+            for node in nodelist:
                 if hasattr(node, 'popover_text'):
                     row.append(self.render_popover(node.id, node.popover_text))
             rows.children.append(row)
         return rows
 
-
     def to_dict(self):
         return {node_id: self.nodes[node_id].value or 0 for node_id in sorted(self.visible_nodes, reverse=True)}
-    
+
     def update_submit_msg(self, node):
         node.children = '\n'.join(['```',json.dumps(
             self.to_dict(),
@@ -312,19 +334,20 @@ class InterferenceGenerator(Reactor):
 nodes = generate_nodes()
 app_state = InterferenceGenerator(app, nodes)
 is_prod = os.getenv("PROD", 0)
-if not is_prod:
-    try:
-        app.run_server(port=8090,
-                   debug=False,
-                   dev_tools_hot_reload=False,
-                   dev_tools_props_check=False,
-                   dev_tools_prune_errors=True,
-                   dev_tools_serve_dev_bundles=True)
-    except OSError as e:
-        pidofport(8089, killall=True)
-        app.run_server(port=8090,
-                   debug=False,
-                   dev_tools_hot_reload=False,
-                   dev_tools_props_check=False,
-                   dev_tools_prune_errors=True,
-                   dev_tools_serve_dev_bundles=True)
+# if not is_prod:
+#     try:
+#         app.run_server(port=8090,
+#                    debug=False,
+#                    dev_tools_hot_reload=False,
+#                    dev_tools_props_check=False,
+#                    dev_tools_prune_errors=True,
+#                    dev_tools_serve_dev_bundles=True)
+#     except OSError as e:
+#         pidofport(8089, killall=True)
+#         app.run_server(port=8090,
+#                    debug=False,
+#                    dev_tools_hot_reload=False,
+#                    dev_tools_props_check=False,
+#                    dev_tools_prune_errors=True,
+#                    dev_tools_serve_dev_bundles=True)
+

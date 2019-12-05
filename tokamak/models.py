@@ -26,6 +26,7 @@ from tokamak.utils import to_serializable
 from flask_caching import Cache
 import functools
 
+from tokamak.utils import IndexedDict
 external_stylesheets = [dbc.themes.LUX]
 DEBUG = False
 
@@ -135,6 +136,137 @@ def transformer_v3(**dependencies):
             return inner
         return outer
     return _transformer
+_members = []
+_id2index = {}
+class ParameterRegistry(object):
+    num_samples = None
+    data = IndexedDict()
+    @property
+    def count(self):
+        return len(_members)
+    def __setattr__(self, item, value):
+        print(f"ParamRegistry called set: {locals()}")
+        try:
+            super().__setattr__(item, value)
+        except Exception as e:
+            # print(e.__class__.__name__ + " " + str(e))
+
+            object().__setattr__(item, value)
+        # print(self.__getattr__(item))
+
+        # return obj
+    def __getattr__(self, item):
+        print(f"ParamRegistry called get: {locals()}")
+        try:
+            obj = super().__getattribute__(item)
+        except Exception as e:
+            # print(e.__class__.__name__ + " " + str(e))
+            obj = object().__getattribute__(item)
+        self.__setattr__(item, obj)
+        print(f"Got obj: {obj}")
+        # if isinstance(obj, Parameter):
+        #     return obj.value
+        return obj
+import inspect
+class Parameter:
+    members = _members
+    id2index =_id2index
+
+
+    # def __getattr__(self, item):
+    #     print(f"Superget: {locals()}")
+    #     if item in _id2index:
+    #         return _members[_id2index[item]]
+    #     raise AttributeError
+    # def __setattr__(self, attr, value):
+    #     print(f"superset: {locals()}")
+    #     try:
+    #         self.__dict__[attr] = initialize_parameter(attr, value)
+    #
+    #     except Exception as e:
+    #         print(e)
+    #         self.__dict__[attr] = value
+
+parameter = ParameterRegistry()
+def initialize_parameter(name, initial_value, ord=None, is_bool=False, matlab_alias=None, matlab_type=None, to_matlab=None, awg_alias=None, awg_type=None, pcap_alias=None, pcap_type=None, min=None, tooltip="", className='', **kwargs):
+
+    base_class = type(initial_value)
+
+    def constantly(var):
+        def only_var():
+            return var
+        return only_var()
+    this=globals()[name] if name in globals() else None
+    class PolymorphicallyTypedParameter(base_class, Parameter):
+        def __init__(self, value):
+            self.name = name
+            self.id = self.name
+            self.value = value
+            self.is_boolean = bool(is_bool)
+            self.initial_value = initial_value
+            self.matlab_alias = matlab_alias or name
+            self.matlab_type = matlab_type or base_class
+            self.to_matlab = lambda: to_matlab(parameter) if to_matlab else constantly(self)
+            self.awg_alias = awg_alias or name
+            self.awg_type = awg_type or base_class
+            self.pcap_alias = pcap_alias or name
+            self.pcap_type = pcap_type or base_class
+            self.ord = _id2index[self.name] if self.name in _id2index else parameter.count
+            super().__init__()
+            self.id2index[self.name] = self.ord
+            self.tooltip = tooltip or f"This is the tooltip for {self.name}."
+            self.min = min or 0
+            self.max = max or 256
+            self.renderer = 'labeled_form_group'
+            self.className = className or ''
+            self.constructor = dbc.Input if not is_bool else dbc.Card
+            setattr(ParameterRegistry, self.name, self)
+            ParameterRegistry.data[self.name] = self
+        def render(self):
+            return self.constructor(**{k:v for k,v in self.__dict__.items() if not k.startswith("_") and not callable(v)})
+        def __set__(self, obj, value):
+            print(f"Set called: {locals()}")
+            # super().__init__(value)
+            self.value = value
+        def __add__(self, other):
+            if isinstance(other, Parameter):
+                other = other.value
+            return self.value + other
+        def __sub__(self, other):
+            if isinstance(other, Parameter):
+                other = other.value
+            return self.value - other
+        def __mul__(self, other):
+            if isinstance(other, Parameter):
+                other = other.value
+            return self.value * other
+
+
+        def __repr__(self):
+            return str(self.value)
+        #
+        # def __str__(self):
+        #     return str(self.value)
+
+            # globals()[self.name] = obj.__getattribute__(self.name)
+        def __get__(self, obj, objtype, val_only=True):
+            print(f"Get called: {locals()}")
+            # print(inspect.stack()[1])
+            # if self.name in globals() and globals()[self.name] != self:
+            #     self.value = globals()[self.name]
+            #     globals()[self.name] = self
+
+
+            return self
+            # if hasattr(obj, self.name):
+            #     return obj.__getattr__(self.name)
+            # return s
+
+    instantiated = PolymorphicallyTypedParameter(initial_value)
+    # prop = property(instantiated, lambda self, obj: Parameter.members[instantiated.ord], lambda self, obj, value: PolymorphicallyTypedParameter(value))
+    setattr(ParameterRegistry, name, instantiated)
+    # globals()[name] = ParameterRegistry.__getattribute__(parameter, name)
+    return instantiated
 
 class IndexedDict(OrderedDict):
     """Like an OrderedDict, which it extends with an `index` method for checking the numeric index
@@ -363,6 +495,7 @@ class Reactor(object):
             self.pending[id] = defaultdict(deque)
             if not hasattr(node, "renderer") or not node.renderer:
                 self.renderers[id] = self.identity
+                node.renderer = self.renderers[id].__name__
             else:
                 name = node.renderer
                 is_valid_renderer, render_f, err = self.validate_renderer(node)
