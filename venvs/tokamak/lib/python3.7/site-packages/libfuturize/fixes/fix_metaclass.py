@@ -31,8 +31,17 @@
 # Local imports
 from lib2to3 import fixer_base
 from lib2to3.pygram import token
-from lib2to3.fixer_util import Name, syms, Node, Leaf, touch_import, Call, \
-    String, Comma, parenthesize
+from lib2to3.fixer_util import (
+    Name,
+    syms,
+    Node,
+    Leaf,
+    touch_import,
+    Call,
+    String,
+    Comma,
+    parenthesize,
+)
 
 
 def has_metaclass(parent):
@@ -48,8 +57,7 @@ def has_metaclass(parent):
             expr_node = node.children[0]
             if expr_node.type == syms.expr_stmt and expr_node.children:
                 left_side = expr_node.children[0]
-                if isinstance(left_side, Leaf) and \
-                        left_side.value == '__metaclass__':
+                if isinstance(left_side, Leaf) and left_side.value == "__metaclass__":
                     return True
     return False
 
@@ -72,8 +80,8 @@ def fixup_parse_tree(cls_node):
 
     # move everything into a suite node
     suite = Node(syms.suite, [])
-    while cls_node.children[i+1:]:
-        move_node = cls_node.children[i+1]
+    while cls_node.children[i + 1 :]:
+        move_node = cls_node.children[i + 1]
         suite.append_child(move_node.clone())
         move_node.remove()
     cls_node.append_child(suite)
@@ -86,12 +94,12 @@ def fixup_simple_stmt(parent, i, stmt_node):
         everything efter the semi-colon into its own simple_stmt node
     """
     for semi_ind, node in enumerate(stmt_node.children):
-        if node.type == token.SEMI: # *sigh*
+        if node.type == token.SEMI:  # *sigh*
             break
     else:
         return
 
-    node.remove() # kill the semicolon
+    node.remove()  # kill the semicolon
     new_expr = Node(syms.expr_stmt, [])
     new_stmt = Node(syms.simple_stmt, [new_expr])
     while stmt_node.children[semi_ind:]:
@@ -124,8 +132,7 @@ def find_metas(cls_node):
             if expr_node.type == syms.expr_stmt and expr_node.children:
                 # Check if the expr_node is a simple assignment.
                 left_node = expr_node.children[0]
-                if isinstance(left_node, Leaf) and \
-                        left_node.value == u'__metaclass__':
+                if isinstance(left_node, Leaf) and left_node.value == u"__metaclass__":
                     # We found a assignment to __metaclass__.
                     fixup_simple_stmt(node, i, simple_node)
                     remove_trailing_newline(simple_node)
@@ -148,7 +155,7 @@ def fixup_indent(suite):
         node = kids.pop()
         if isinstance(node, Leaf) and node.type != token.DEDENT:
             if node.prefix:
-                node.prefix = u''
+                node.prefix = u""
             return
         else:
             kids.extend(node.children[::-1])
@@ -173,7 +180,7 @@ class FixMetaclass(fixer_base.BaseFix):
             last_metaclass = stmt
             stmt.remove()
 
-        text_type = node.children[0].type # always Leaf(nnn, 'class')
+        text_type = node.children[0].type  # always Leaf(nnn, 'class')
 
         # figure out what kind of classdef we have
         if len(node.children) == 7:
@@ -195,52 +202,53 @@ class FixMetaclass(fixer_base.BaseFix):
             # Node(classdef, ['class', 'name', ':', suite])
             #                 0        1       2    3
             arglist = Node(syms.arglist, [])
-            node.insert_child(2, Leaf(token.RPAR, u')'))
+            node.insert_child(2, Leaf(token.RPAR, u")"))
             node.insert_child(2, arglist)
-            node.insert_child(2, Leaf(token.LPAR, u'('))
+            node.insert_child(2, Leaf(token.LPAR, u"("))
         else:
             raise ValueError("Unexpected class definition")
 
         # now stick the metaclass in the arglist
         meta_txt = last_metaclass.children[0].children[0]
-        meta_txt.value = 'metaclass'
+        meta_txt.value = "metaclass"
         orig_meta_prefix = meta_txt.prefix
 
         # Was: touch_import(None, u'future.utils', node)
-        touch_import(u'future.utils', u'with_metaclass', node)
+        touch_import(u"future.utils", u"with_metaclass", node)
 
         metaclass = last_metaclass.children[0].children[2].clone()
-        metaclass.prefix = u''
+        metaclass.prefix = u""
 
         arguments = [metaclass]
 
         if arglist.children:
             if len(arglist.children) == 1:
                 base = arglist.children[0].clone()
-                base.prefix = u' '
+                base.prefix = u" "
             else:
                 # Unfortunately six.with_metaclass() only allows one base
                 # class, so we have to dynamically generate a base class if
                 # there is more than one.
                 bases = parenthesize(arglist.clone())
-                bases.prefix = u' '
-                base = Call(Name('type'), [
-                    String("'NewBase'"),
-                    Comma(),
-                    bases,
-                    Comma(),
-                    Node(
-                        syms.atom,
-                        [Leaf(token.LBRACE, u'{'), Leaf(token.RBRACE, u'}')],
-                        prefix=u' '
-                    )
-                ], prefix=u' ')
+                bases.prefix = u" "
+                base = Call(
+                    Name("type"),
+                    [
+                        String("'NewBase'"),
+                        Comma(),
+                        bases,
+                        Comma(),
+                        Node(
+                            syms.atom,
+                            [Leaf(token.LBRACE, u"{"), Leaf(token.RBRACE, u"}")],
+                            prefix=u" ",
+                        ),
+                    ],
+                    prefix=u" ",
+                )
             arguments.extend([Comma(), base])
 
-        arglist.replace(Call(
-            Name(u'with_metaclass', prefix=arglist.prefix),
-            arguments
-        ))
+        arglist.replace(Call(Name(u"with_metaclass", prefix=arglist.prefix), arguments))
 
         fixup_indent(suite)
 
@@ -248,15 +256,16 @@ class FixMetaclass(fixer_base.BaseFix):
         if not suite.children:
             # one-liner that was just __metaclass_
             suite.remove()
-            pass_leaf = Leaf(text_type, u'pass')
+            pass_leaf = Leaf(text_type, u"pass")
             pass_leaf.prefix = orig_meta_prefix
             node.append_child(pass_leaf)
-            node.append_child(Leaf(token.NEWLINE, u'\n'))
+            node.append_child(Leaf(token.NEWLINE, u"\n"))
 
-        elif len(suite.children) > 1 and \
-                 (suite.children[-2].type == token.INDENT and
-                  suite.children[-1].type == token.DEDENT):
+        elif len(suite.children) > 1 and (
+            suite.children[-2].type == token.INDENT
+            and suite.children[-1].type == token.DEDENT
+        ):
             # there was only one line in the class body and it was __metaclass__
-            pass_leaf = Leaf(text_type, u'pass')
+            pass_leaf = Leaf(text_type, u"pass")
             suite.insert_child(-1, pass_leaf)
-            suite.insert_child(-1, Leaf(token.NEWLINE, u'\n'))
+            suite.insert_child(-1, Leaf(token.NEWLINE, u"\n"))

@@ -37,14 +37,14 @@ class FixAbsoluteImport(FixImport):
         """
         if self.skip:
             return
-        imp = results['imp']
+        imp = results["imp"]
 
         if node.type == syms.import_from:
             # Some imps are top-level (eg: 'import ham')
             # some are first level (eg: 'import ham.eggs')
             # some are third level (eg: 'import ham.eggs as spam')
             # Hence, the loop
-            while not hasattr(imp, 'value'):
+            while not hasattr(imp, "value"):
                 imp = imp.children[0]
             if self.probably_a_local_import(imp.value):
                 imp.value = u"." + imp.value

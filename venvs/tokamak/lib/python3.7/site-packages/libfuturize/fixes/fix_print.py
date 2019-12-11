@@ -18,11 +18,12 @@ No changes are applied if print_function is imported from __future__
 from lib2to3 import patcomp, pytree, fixer_base
 from lib2to3.pgen2 import token
 from lib2to3.fixer_util import Name, Call, Comma, String
+
 # from libmodernize import add_future
 
 parend_expr = patcomp.compile_pattern(
-              """atom< '(' [arith_expr|atom|power|term|STRING|NAME] ')' >"""
-              )
+    """atom< '(' [arith_expr|atom|power|term|STRING|NAME] ')' >"""
+)
 
 
 class FixPrint(fixer_base.BaseFix):
@@ -40,8 +41,7 @@ class FixPrint(fixer_base.BaseFix):
 
         if bare_print:
             # Special-case print all by itself.
-            bare_print.replace(Call(Name(u"print"), [],
-                               prefix=bare_print.prefix))
+            bare_print.replace(Call(Name(u"print"), [], prefix=bare_print.prefix))
             # The "from __future__ import print_function"" declaration is added
             # by the fix_print_with_import fixer, so we skip it here.
             # add_future(node, u'print_function')
@@ -60,7 +60,7 @@ class FixPrint(fixer_base.BaseFix):
         if args and args[0] == pytree.Leaf(token.RIGHTSHIFT, u">>"):
             assert len(args) >= 2
             file = args[1].clone()
-            args = args[3:] # Strip a possible comma after the file expression
+            args = args[3:]  # Strip a possible comma after the file expression
         # Now synthesize a print(args, sep=..., end=..., file=...) node.
         l_args = [arg.clone() for arg in args]
         if l_args:
@@ -84,10 +84,9 @@ class FixPrint(fixer_base.BaseFix):
     def add_kwarg(self, l_nodes, s_kwd, n_expr):
         # XXX All this prefix-setting may lose comments (though rarely)
         n_expr.prefix = u""
-        n_argument = pytree.Node(self.syms.argument,
-                                 (Name(s_kwd),
-                                  pytree.Leaf(token.EQUAL, u"="),
-                                  n_expr))
+        n_argument = pytree.Node(
+            self.syms.argument, (Name(s_kwd), pytree.Leaf(token.EQUAL, u"="), n_expr)
+        )
         if l_nodes:
             l_nodes.append(Comma())
             n_argument.prefix = u" "

@@ -11,11 +11,15 @@ import sys
 try:
     __file__
 except NameError:
-    raise AssertionError("You must use exec(open(this_file).read(), {'__file__': this_file}))")
+    raise AssertionError(
+        "You must use exec(open(this_file).read(), {'__file__': this_file}))"
+    )
 
 # prepend bin to PATH (this file is inside the bin directory)
 bin_dir = os.path.dirname(os.path.abspath(__file__))
-os.environ["PATH"] = os.pathsep.join([bin_dir] + os.environ.get("PATH", "").split(os.pathsep))
+os.environ["PATH"] = os.pathsep.join(
+    [bin_dir] + os.environ.get("PATH", "").split(os.pathsep)
+)
 
 base = os.path.dirname(bin_dir)
 
@@ -34,7 +38,9 @@ else:
     if IS_WIN:
         site_packages = os.path.join(base, "Lib", "site-packages")
     else:
-        site_packages = os.path.join(base, "lib", "python{}.{}".format(*sys.version_info), "site-packages")
+        site_packages = os.path.join(
+            base, "lib", "python{}.{}".format(*sys.version_info), "site-packages"
+        )
 
 prev = set(sys.path)
 site.addsitedir(site_packages)

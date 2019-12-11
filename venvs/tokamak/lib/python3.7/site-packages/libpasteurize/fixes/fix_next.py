@@ -36,8 +36,7 @@ class FixNext(fixer_base.BaseFix):
         arg_ = results.get(u"arg")
         if arg_:
             arg = arg_.clone()
-            head.replace(Attr(Name(unicode(arg),prefix=head.prefix),
-                              Name(u"next")))
+            head.replace(Attr(Name(unicode(arg), prefix=head.prefix), Name(u"next")))
             arg_.remove()
         elif base:
             attr.replace(Name(u"next", prefix=attr.prefix))

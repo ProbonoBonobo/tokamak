@@ -35,6 +35,7 @@ app.layout = html.Div(children=[
 @app.callback(dash.dependencies.Output('root', 'thisIsWeird'),
                [dash.dependencies.Input('hello', 'n_clicks')])
 def say_hello(_):
+    print(f"Clicked {_} times")
     return f"Hello at {datetime.datetime.now().isoformat()}"
 
 
