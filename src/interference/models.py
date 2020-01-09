@@ -61,11 +61,11 @@ class ParameterRegistry(object):
         # garbage collected. that seems like a good thing, so let's go ahead
         # and compute it at instantiation time
 
-    def to_matlab(self, ns):
+    def to_matlab(self, eng=None):
         print(f"To matlab called")
         cmd = {}
         visible_params = Parameter().visible_nodes
-        transpiled = write_to_mat(ns, visible_params)
+        transpiled = self.transpile_to_mat()
         serialized = json.dumps(cmd, default=matlab_serializer)
         lines = []
         filepath= f'/home/kz/share/my_results.json'
@@ -87,17 +87,23 @@ class ParameterRegistry(object):
 
         lines.append(f"savejson('Results', ns, '{filepath}');")
         lines.append("diary off;")
-        script = '\n'.join(lines)
-        with open("/home/kz/share/testing2.m", 'w') as f:
-            f.write(script)
-        print(f"Text of testing2.m:")
-        print(script)
-        output = subprocess.check_output(f"""cd /home/kz/share/ && {path_to_matlab} -nosplash -nodesktop -r 'run("/home/kz/share/testing2.m"); quit;'""", shell=True)
-        parsed_html = BeautifulSoup(output)
-        text_only = parsed_html.text
-        print(f"Process finished. Output is:\n\n {text_only}")
+        for line in lines:
+            eng.eval(line, nargout=0)
+
+        # script = '\n'.join(lines)
+        # with open("/home/kz/share/testing2.m", 'w') as f:
+        #     f.write(script)
+        # print(f"Text of testing2.m:")
+        # print(script)
+        #
+        # output = subprocess.check_output(f"""cd /home/kz/share/ && {path_to_matlab} -nosplash -nodesktop -r 'run("/home/kz/share/testing2.m"); quit;'""", shell=True)
+        # parsed_html = BeautifulSoup(output)
+        # text_only = parsed_html.text
+        # print(f"Process finished. Output is:\n\n {text_only}")
         figs = load_mat(filepath, ['input_fig', 'output_fig'])
-        return figs
+        fig0 = eng.eval("input_fig")
+        fig1 = eng.eval("output_fig")
+        return [fig0, fig1]
 
 
 
@@ -150,45 +156,7 @@ class Parameter:
             "interference_type",
             "submit",
             "clicks"}
-    operators = ["file_type", "interference_type"]
-    required_ext = {"MAT": ".m", "PCAP": ".pcap", "AWG": ".wfm"}
-    eigenstates = {
-        "MAT": {
-            "CW": ("sampling_freq", "cw_freq_offset"),
-            "hop": ("n_hops", "bandwidth_denominator"),
-            "chirp": (
-                "bandwidth_denominator",
-                "n_sweeps",
-                "n_chirps",
-                "continuous_phase",
-                "random_start_freq",
-            ),
-            "stepchirp": (
-                "bandwidth_denominator",
-                "n_sweeps",
-                "steps_per_chirp",
-                "continuous_phase",
-                "random_start_freq",
-            ),
-            "randFM": (
-                "bandwidth_denominator",
-                "randfm_moving_average",
-                "randfm_centering",
-            ),
-        },
-        "AWG": {
-            "hop": ("Bandwidth", "DwellTime"),
-            "chirp": ("Bandwidth", "ChirpRate"),
-            "stepchirp": ("Bandwidth", "ChirpRate", "Nsweeps"),
-            "randFM": ("Bandwidth", "MovingAvgLength", "RandomFMCentering"),
-        },
-        "PCAP": {
-            "hop": ("Bandwidth", "DwellTime"),
-            "chirp": ("Bandwidth", "ChirpRate"),
-            "stepchirp": ("Bandwidth", "ChirpRate", "Nsweeps"),
-            "randFM": ("Bandwidth", "MovingAvgLength", "RandomFMCentering"),
-        },
-    }
+
     def __init__(self, *args, **kwargs):
         # for prop in self.invariants:
             for filetype, data in self.eigenstates.items():
@@ -249,7 +217,6 @@ def hashable(x):
 def initialize_parameter(
     name,
     initial_value,
-    ns=None,
     constructor=dbc.Input,
     label=None,
     ord=None,
@@ -269,8 +236,7 @@ def initialize_parameter(
     group="",
     **kwargs,
 ):
-    if ns is None:
-        ns = ParameterRegistry()
+
     base_class = type(initial_value)
 
     def constantly(var):
@@ -301,9 +267,7 @@ def initialize_parameter(
             self.initial_value = initial_value
             self.matlab_alias = matlab_alias or name
             self.matlab_type = matlab_type or base_class
-            self.to_matlab = (
-                lambda: to_matlab(ns) if to_matlab else constantly(self)
-            )
+
             self.awg_alias = awg_alias or name
             self.awg_type = awg_type or base_class
             self.pcap_alias = pcap_alias or name

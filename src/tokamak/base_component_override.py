@@ -110,13 +110,18 @@ class Component(with_metaclass(ComponentMeta, object)):
             # pylint: disable=no-member
             # k = k.replace("_", "-")
             is_serializable = not callable(v)
+            if isinstance(v, str) and v.startswith('lambda'):
+                is_serializable = False
             if is_serializable:
                 if k not in _prop_names:
                     _prop_names.append(k)
                 setattr(self, k, v)
             else:
-                v = partial(v, self=self)
-                _dynamic_props[k] = v
+                if isinstance(v, str) and v.startswith("lambda"):
+                    v = eval(v)
+                if not k.startswith("_"):
+                    # v = partial(v, self=self)
+                    _dynamic_props[k] = v
 
         self._dynamic_props = _dynamic_props
         self._prop_names = tuple(_prop_names)
@@ -130,6 +135,10 @@ class Component(with_metaclass(ComponentMeta, object)):
             for p in self._prop_names  # pylint: disable=no-member
             if hasattr(self, p)
         }
+        props.update({
+            k:v()
+            for k, v in self._dynamic_props.items()
+        })
         # Add the wildcard properties data-* and aria-*
         props.update(
             {
@@ -306,15 +315,21 @@ class Component(with_metaclass(ComponentMeta, object)):
 
     def __repr__(self):
         # pylint: disable=no-member
-        props_with_values = [
-            c for c in self._prop_names if getattr(self, c, None) is not None
-        ]
+        props_with_values = {
+            c: repr(getattr(self, c)) for c in self._prop_names if getattr(self, c, None) is not None
+        }
+        if hasattr(self, '_dynamic_props'):
+            dynamic_props = {}
+            for prop, func in self._dynamic_props.items():
+                try:
+                    dynamic_props[prop] = func()
+                except Exception as e:
+                    print(f"{e.__class__.__name__} : {e}")
+                    pass
+            props_with_values.update(dynamic_props)
 
         if any(p != "children" for p in props_with_values):
-            props_string = ", ".join(
-                "{prop}={value}".format(prop=p, value=repr(getattr(self, p)))
-                for p in props_with_values
-            )
+            props_string = ", ".join([f"{k}={v}" for k, v in props_with_values.items()])
         else:
             props_string = repr(getattr(self, "children", None))
         return "{type}({props_string})".format(
@@ -427,3 +442,4 @@ if __name__ == "__main__":
         value=lambda self: random.randrange(0, 1000),
         **{"aria-footest": "bar"}
     )
+    print(foo)

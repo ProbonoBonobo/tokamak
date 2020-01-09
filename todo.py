@@ -122,13 +122,14 @@ class TodoApp(dbc.Jumbotron):
             html.Section(
                 className="todoapp",
                 children=[
-                    html.Header(
+                    html.Header([
+                        html.H1("todos"),
                         dbc.Input(
                             id="add-todo",
                             className="new-todo",
                             placeholder="What do you want to do today?",
-                        ),
-                        className="header",
+                        )],
+                        className="header"
                     ),
                     html.Section(html.Div(self.items), className="main"),
                     html.Footer(
@@ -188,7 +189,7 @@ def callback(_, selected_filter1, selected_filter2, value):
 
     if all(
         TodoFilter(id=id.split(".")[0]).n_clicks == val
-        for id, val in changed_ids.items()
+        for id, val in changed_ids
     ):
         return dash.no_update
 
@@ -196,4 +197,4 @@ def callback(_, selected_filter1, selected_filter2, value):
 
 
 if __name__ == "__main__":
-    app.run_server(port=8888, debug=False)
+    app.run_server(port=8000, debug=False)

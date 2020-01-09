@@ -5,6 +5,10 @@ dash-daq>=0.3.0
 dash-html-components>=1.0
 flask-caching>=1.7.2
 gemeinsprache>=0.0
+lxml<5.0,>=4.4
+orca<2.0,>=1.5
+psutil<6.0,>=5.6
 redis>=3.3.11
+requests<3.0,>=2.22
 termcolor>=1.1.0
 werkzeug

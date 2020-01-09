@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/../tensorchef/.idea/tensorchef.iml" filepath="$PROJECT_DIR$/../tensorchef/.idea/tensorchef.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/tokamak.iml" filepath="$PROJECT_DIR$/.idea/tokamak.iml" />
     </modules>
   </component>

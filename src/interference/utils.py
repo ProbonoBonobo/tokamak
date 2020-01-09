@@ -61,6 +61,7 @@ def load_mat(filepath='/home/kz/share/my_results1575870300.6698883.json', root_k
     os.makedirs("/home/kz/share/images", exist_ok=True)
     if keys:
         for k in keys:
+            print(f"Loading {k}")
 
             arr = np.array(mat[k])
             if save_to_svg:
@@ -70,7 +71,7 @@ def load_mat(filepath='/home/kz/share/my_results1575870300.6698883.json', root_k
                     print(f"Failed to save svg image: {e.__class__.__name__} :: {e}")
             print(f"generating {k} heatmap")
             fig = go.Figure(data=go.Heatmap(
-                z = arr.tolist()))
+                z=arr.tolist()))
             # fig.show()
             figs.append(fig)
 

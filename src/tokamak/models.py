@@ -45,8 +45,8 @@ _mtimes = defaultdict(lambda: datetime.datetime.fromordinal(1))
 def transformer(func):
     funcname = func.__name__
     @functools.wraps
-    def wrapped(args, **kwargs):
-        value = func(args, **kwargs)
+    def wrapped(*args, **kwargs):
+        value = func(*args, **kwargs)
         return value
 
     return wrapped
@@ -330,28 +330,13 @@ class Reactor(object):
     _last_update = datetime.datetime.now()
     _cache = {}
     _exec_times = defaultdict(float)
-    _immutable_attrs = {
-        "id",
-        "key",
-        "type",
-        "className",
-        "props",
-        "namespace",
-        "_namespace",
-        "_type",
-        "_prop_names",
-        "_valid_wildcard_attributes",
-        "_dynamic_props",
-        "available_properties",
-        "available_wildcard_properties",
-        "DYNAMIC_PROPS",
-        "func_params",
-        "valid_wildcard_attributes",
-        "renderer",
-        "label",
-        "inverse",
-        "in-navbar",
-    }
+    _mutable_attrs = {"value",
+                      "n_clicks",
+                      "n_clicks_timestamp",
+                      "n_intervals",
+                      "on"}
+
+
 
     def __init__(self, app, nodes, debug=DEBUG, cache=None, cache_timeout=10):
         self.DEBUG = debug
@@ -373,9 +358,7 @@ class Reactor(object):
             )
         # nodes = self._assign_keys_to_children(nodes)
 
-        self.nodes = IndexedDict(
-            {node.id: node for node in nodes} if not isinstance(nodes, dict) else nodes
-        )
+        self.nodes = nodes
         self.classmap = {}
         self.renderers = {}
         self.semaphores = {}
@@ -388,7 +371,7 @@ class Reactor(object):
             #    reinitialize this object whenever there's a state update. (It's a strategy I've seen
             #    libraries with similar aspirations use.)
 
-            self.semaphores[id] = RLock()
+            # self.semaphores[id] = RLock()
             self.pending[id] = defaultdict(deque)
             if not hasattr(node, "renderer") or not node.renderer:
                 self.renderers[id] = self.identity
@@ -451,7 +434,6 @@ class Reactor(object):
 
         @self.app.callback(*self.callback_dependencies)
         def callback(*args):
-
             return self.batched_callback(*args)
 
     def validate_transformer(self, node, tx_name):
@@ -481,7 +463,7 @@ class Reactor(object):
 
                 if arity == 1 or has_generic_signature:
                     before = node
-                    args = node
+                    args = [node]
                     try:
                         after = transformer(*args, **kwargs)
                     except Exception as e:
