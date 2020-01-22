@@ -59,13 +59,43 @@ import os
 import time
 import subprocess
 import sys
-
+from munch import Munch
 import subprocess
+import pickle
 
 try:
     import matlab.engine
 except Exception as e:
     print(f"{e.__class__.__name__} :: {e}")
+
+
+
+def make_session_id(n=1, data_fp="/home/kz/projects/tokamak/lib/sess_ids.pkl",
+                    conf_fp="/home/kz/projects/tokamak/lib/sess_info.pkl"):
+
+    # if not os.path.isfile(conf_fp):
+        with open(data_fp, "rb") as f:
+            phrases = pickle.load(f)
+            sess_id = random.sample(phrases, n)[0]
+        # return sess_id
+        MATLAB = Munch({"started": False,
+                        "path_to_lockfile": f"/tmp/matlabsession_{sess_id}",
+                        "session_id": sess_id})
+        return MATLAB
+    #     with open(conf_fp, "wb") as f:
+    #         pickle.dump(MATLAB, f)
+    #
+    # else:
+    #     with open(conf_fp, 'rb') as f:
+    #         MATLAB = pickle.load(f)
+    # return MATLAB
+
+
+MATLAB = make_session_id()
+
+
+
+
 
 def start_matlab_engine():
         err = None
@@ -165,6 +195,18 @@ def install_python_matlab_engine():
 
 
 def connect_matlab(session_id='foo'):
+    global MATLAB
+    session_id = MATLAB.session_id
+    if MATLAB.started:
+        while True:
+            try:
+                eng = matlab.engine.connect_matlab(session_id)
+                break
+            except matlab.engine.EngineError:
+                print(f"shareEngine not yet initialized. Retrying in 2 seconds...")
+                time.sleep(2)
+        return eng
+
     ok, err = install_python_matlab_engine()
     try:
         eng = matlab.engine.connect_matlab(session_id)
@@ -175,18 +217,18 @@ def connect_matlab(session_id='foo'):
             outs, errs = cmd.communicate(timeout=1)
         except subprocess.TimeoutExpired:
             pass
-        lockfile = f"/tmp/matlabsession_{session_id}"
+
         ok = False
         sleep_interval = 0.2
         max_wait = 20
         intervals = math.ceil(max_wait / sleep_interval)
         print(f"Waiting for MATLAB to generate lockfile...")
-        for i in range(intervals):
-            if not os.path.isfile(lockfile):
-                time.sleep(0.2)
+        while True:
+            if not os.path.isfile(MATLAB.path_to_lockfile):
+                time.sleep(0.5)
             else:
                 print(f"Lockfile created.")
-                with open(lockfile, 'r') as f:
+                with open(MATLAB.path_to_lockfile, 'r') as f:
                     ts = f.read()
                 print(f"Session '{session_id}' initialized at {ts.strip()}")
                 ok = True
@@ -209,6 +251,7 @@ def connect_matlab(session_id='foo'):
                 eng = None
         else:
             eng = None
+    MATLAB.started = True
     return eng
 
 def convert_to_matlab_repr(param, app_state):
@@ -238,8 +281,6 @@ def convert_to_matlab_repr(param, app_state):
 
         def inner(*args, **kwargs):
             value = func()
-            # if hasattr(param, 'to_matlab'):
-            #     value = param.to_matlab(app_state)
             if isinstance(value, bool):
                 value = str(value).lower()
             elif value is None:
@@ -253,7 +294,49 @@ def grouper(iterable, n, fillvalue=None):
     # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
     args = [iter(iterable)] * n
     return zip_longest(*args, fillvalue=fillvalue)
+from plotly.subplots import make_subplots
 
+
+def gen_noise(m=8, n=16, k=1, lo=0, hi=100000):
+    arr = [(np.random.rand(m, n) * hi + lo).tolist() for i in range(k)]
+    if k < 2:
+        arr = arr[0]
+    return arr
+
+
+def render_spectrogram(*arrays, cols=1, rows=None, titles=None):
+    print(len(arrays))
+    rows = math.ceil(len(arrays) / cols)
+    mmap = (rows, cols)
+    size = rows * cols
+    print(f"Dims are: {mmap}")
+    titles = titles or [f"Figure {i}" for i in range(len(arrays))]
+    arrmin = min(np.min(arr) for arr in arrays)
+    arrmax = max(np.max(arr) for arr in arrays)
+    tickvals = [0]
+    while tickvals[-1] <= arrmax:
+        tickvals.append(pow(10, (2 * len(tickvals))))
+
+    traces = [go.Heatmap(z=arr,
+                         colorbar={"tick0": 0,
+                                   "tickmode": 'array',
+                                   'tickvals': tickvals},
+                         coloraxis='coloraxis') for arr in arrays]
+    fig = make_subplots(rows=rows, cols=cols, subplot_titles=titles)
+    for i, trace in enumerate(traces):
+        coords = [int(var + 1) for var in np.unravel_index(i, mmap)]
+        print(f"Coords: {coords}")
+        x, y = coords
+        print(f"x: {x}, {type(x)}")
+        fig.add_trace(trace, *coords)
+    fig.update_layout(coloraxis={'colorscale': 'magma'})
+    return fig
+
+
+def gen_noisy_spectrograms(k=2, cols=1, rows=None, titles=None):
+
+    return render_spectrogram(gen_noise(k=1, lo=100, hi=10000),
+                              gen_noise(k=1, lo=0, hi=1000), cols=cols, rows=rows, titles=titles)
 
 external_stylesheets = [
     "https://codepen.io/chriddyp/pen/bWLwgP.css",
@@ -276,8 +359,10 @@ render_semaphore = threading.RLock()
 # })
 app.config.suppress_callback_exceptions = True
 server = app.server
-app.layout = html.Div(id='approot', children=[])
-
+app.layout = html.Div([dcc.Interval(id='eventloop', interval=10000, n_intervals=-1), html.Div(id='root', children=[])])
+path_to_log = "/home/kz/share/matlab_log.txt"
+with open(path_to_log, 'w') as f:
+    f.write("Initialized app")
 
 
 pdata = [
@@ -488,23 +573,25 @@ pdata = [
       "on_click": "generate_interference",
       "n_clicks_timestamp": 0,
       "group": "footer"},
-    # {"id": "graph_container",
-    #  "constructor": html.Div,
-    #  "children": [],
-    #  "value": None,
-    #  "className":
-
     {"id": "graph_container",
      "constructor": dbc.Container,
-     "renderers": "show_figures",
-     "children" : []},
-    {"id": "clicks",
-     "constructor": dcc.Markdown,
-     "children": "",
-     "value": "",
+     "fluid": True,
+     "async": True,
+     "renderers": "",
+     "children": [dbc.Row(dbc.Col(children=[dcc.Graph(figure={},
+                                                      id='spectrograms')],
+                                  width=12))]},
+   { "id": "matlab_status_container",
+    "constructor": html.Div,
+    "children": [html.Div(id='matlab_status', children=[html.P("Browser reloading... one moment, please")], is_loading=True)],
+    "className": "identity",
+    "renderers": "",
+    "async": True,
+    # "renderers": "",
+    "group": "footer"},
 
-     "className": "",
-     "group": "footer"}
+
+
 ]
 _ids = set([node['id'] for node in pdata])
 
@@ -553,12 +640,18 @@ class App(Reactor):
             "randFM": ("Bandwidth", "MovingAvgLength", "RandomFMCentering"),
         },
     }
-    always_visible_ids = {'isrdb', 'num_samples', 'file_path', 'file_type', 'interference_type', 'use_bandpass_data', 'graph_container'}
+    _component_has_updates = False
+    _component_has_notification = False
+    _suppress_notifications = False
+    always_visible_ids = {'isrdb', 'num_samples', 'file_path', 'file_type', 'interference_type', 'use_bandpass_data', 'graph_container', 'matlab_status_container'}
+    _log = []
     def __init__(self, app, parameter_definitions):
         self.figures = []
         self.engine = connect_matlab()
         self.nodes = self.initialize_parameters(parameter_definitions)
+
         super().__init__(app, self.nodes)
+
 
     def say_hello(self, node):
         print(f"Node {node.id} (value: {node.value}) says hello!")
@@ -653,6 +746,7 @@ class App(Reactor):
                                  {'value': 'hop', 'label': 'hop } ...]
            ...and so on. But it also dynamically sets this property, whose value
            is derived from the current output format."""
+        # self.log("Interference options ")
         node.options = optionize(*self.eigenstates[self.operators[0].value].keys())
         return node
 
@@ -680,9 +774,10 @@ class App(Reactor):
         )
         return node
 
-    @property
-    def view(self):
-        return [reduce(lambda node, renderer: renderer(node), [node, *self.renderers[id]]) for id, node in self.nodes.items()]
+
+    def render(self):
+        rendered = [reduce(lambda node, renderer: renderer(node), [node, *self.renderers[id]]) for id, node in self.nodes.items() if not node.async]
+        return html.Div([dbc.Container(children=rendered[:-2]), *rendered[-2:]])
 
 
     def labeled_form_group(self, node):
@@ -751,8 +846,9 @@ class App(Reactor):
 
     def button_renderer(self, node):
         # component = node if isinstance(node, Component) else node.render()
+        self.log("Preparing to render...")
         self.state.append('\n'.join(write_to_mat(_ns, _ns.num_samples.visible_nodes)))
-        print(f"Rendering button (clicked at {ns.submit.n_clicks_timestamp} )")
+        self.log(f"Rendering button (clicked at {ns.submit.n_clicks_timestamp} )")
         print(red(self.state[-2]))
         print(green(self.state[-1]))
         if self.state[-2] == self.state[-1]:
@@ -762,12 +858,16 @@ class App(Reactor):
             if render_semaphore._is_owned():
                 print(f"State has changed, but renderer is currently blocked.")
             else:
+                self.log(f"Acquiring mutex...")
                 render_semaphore.acquire(timeout=30)
+                self.log(f"Mutex acquired. Generating interference...")
                 print(f"Submit fired! Recalculating heatmap...")
                 figs = self.generate_interference()
                 self.last_click += 1
                 try:
+                    self.log(f"Releasing mutex...")
                     render_semaphore.release()
+                    self.log(f"Mutex released. Update complete.")
                 except RuntimeError:
                     pass
                 # self.last_click = node.n_clicks
@@ -801,13 +901,34 @@ class App(Reactor):
     #     figs = self.registry.to_matlab(_ns)
     #     self.figures = figs
     #     return node
+    # def set_initial_layout(self):
+    #     return html.Div([html.Div(id='approot', children=[])])
 
     def transpile_to_mat(self):
-        return '\n'.join([f"NumSamples = {self.num_samples.value};", *[param.to_matlab()
-                                                                       for id, param
-                                                                       in self.nodes.items()
-                                                                       if id in self.visible_nodes]])
-
+        self.log(f"Checking whether Magic Filter is available...")
+        has_magic_filter = int(self.engine.eval("exist('GenerateInterference')"))
+        if not has_magic_filter:
+            self.log(f"Magic Filter not found. Spectrogram output will be generated from random (gaussian) noise.")
+            transpiled = ["input_fig = randi([0,100000],16,32);",
+                          "output_fig = randi([0,1000],16,32);"]
+        else:
+            #self.log("Generating figures...")
+            # self.figures = gen_noisy_spectrograms()
+            # self.log(f"Complete. Notifying event loop...")
+            # self._component_has_updates = True
+            transpiled = [f"NumSamples = {self.num_samples.value};", *[param.to_matlab()
+                                                                           for id, param
+                                                                           in self.nodes.items()
+                                                                           if id in self.visible_nodes],
+                          f"Input = GenerateInterference(NumSamples, InterferenceConfig);",
+                f"input_arr = abs(Input);",
+                f"fig0 = specgram(Input);",
+                f"input_fig = abs(fig0);",
+                f"Output = Software_results(Input);",
+                f"output_arr = abs(Output);",
+                f"fig1 = specgram(Output);",
+                f"output_fig = abs(fig1);"]
+        return transpiled
 
     def initialize_parameters(self, pdata):
         params = {}
@@ -825,6 +946,8 @@ class App(Reactor):
                 param.tooltip = re.sub(r'\s+', r' ', param.tooltip)
             except AttributeError:
                 pass
+            if not hasattr(param, 'async'):
+                param.async = False
             if not hasattr(param, 'renderers'):
                 param.renderers = 'labeled_form_group'
             if param.renderers == 'labeled_form_group':
@@ -876,70 +999,91 @@ class App(Reactor):
             return self.nodes[item]
         else:
             return object.__getattribute__(self, item)
+    def log(self, msg):
+        with open(path_to_log, "a") as f:
+            f.write(f"[ T{time.time()} ] {msg}\n")
+
+        self._component_has_notification = True
+    def get_status(self):
+        with open(path_to_log, 'r') as f:
+            lines = f.read().split("\n")
+        return lines
     def generate_interference(self):
         import subprocess
+        self.log(f"Preparing to generate interference...")
         path_to_matlab = '/home/kz/.local/MATLAB/bin/matlab'
         print(f"To matlab called")
-        cmd = {}
-
-        serialized = self.transpile_to_mat()
-        lines = []
-        filepath= f'/home/kz/share/my_results.json'
-        # lines.append("diary /home/kz/share/log.txt;")
-        # lines.append("diary on;")
-        lines.append("cd /home/kz/share;")
-        # lines.append("addpath('/home/kz/share/jsonlab');")
-        lines.append(serialized)
-        lines.append(f"Input = GenerateInterference(NumSamples, InterferenceConfig);")
-        lines.append(f"input_arr = abs(Input);")
-        lines.append(f"fig0 = specgram(Input);")
-        lines.append(f"input_fig = abs(fig0);")
-        lines.append(f"Output = Software_results(Input);")
-        lines.append(f"output_arr = abs(Output);")
-        lines.append(f"fig1 = specgram(Output);")
-        lines.append(f"output_fig = abs(fig1);")
-        # lines.append(f"ns = struct('input_fig', input_fig, 'output_fig', output_fig);")
-        # lines.append(f"ns = jsonencode(ns);")
-
-        # lines.append(f"savejson('Results', ns, '{filepath}');")
-        # lines.append("diary off;")
 
 
-        for line in lines:
-            try:
-                self.engine.eval(line, nargout=0)
-            except Exception as e:
-                print(f"{e.__class__.__name__} while executing line '{line}': {e}")
-                continue
+        if True:
+            cmd = {}
 
-            # script = '\n'.join(lines)
-            # with open("/home/kz/share/testing2.m", 'w') as f:
-            #     f.write(script)
-            # print(f"Text of testing2.m:")
-            # print(script)
+            serialized = self.transpile_to_mat()
+            # # block_scoped = '\t'.join([line + "\n" for line in serialized])
+            # # fallback = "\tinput_arr = randi(1,256,100);\n\toutput_arr = randi(1,256,1000000);\n\tinput_fig = spectrogram(input_arr);\n\toutput_fig = spectrogram(output_arr);"
+            # #
+            # # lines = []
+            # filepath= f'/home/kz/share/my_results.json'
+            # # lines.append("diary /home/kz/share/log.txt;")
+            # # lines.append("diary on;")
+            # lines.append("cd /home/kz/share;")
+            # # lines.append("addpath('/home/kz/share/jsonlab');")
+            # lines.append(f"""if exist('GenerateInterference')\n {block_scoped}\nelse\n\t{fallback};\nend\n""")
             #
-            # output = subprocess.check_output(f"""cd /home/kz/share/ && {path_to_matlab} -nosplash -nodesktop -r 'run("/home/kz/share/testing2.m"); quit;'""", shell=True)
-            # parsed_html = BeautifulSoup(output)
-            # text_only = parsed_html.text
-            # print(f"Process finished. Output is:\n\n {text_only}")
-        # figs = load_mat(filepath, keys=['input_fig', 'output_fig'])
-        try:
-            arr0 = self.engine.eval("input_fig")
-            arr1 = self.engine.eval("output_fig")
-        except Exception as e:
-            print(sys.gettrace())
-            print(f"Couldn't get ns.input_fig: {e}")
 
-        z0 = np.array(arr0, dtype=np.float64).tolist()
-        z1 = np.array(arr1, dtype=np.float64).tolist()
-        #z0 = [float(x) for self.engine.eval('input_fig'))
-        #z1 = list(self.engine.eval('output_fig'))
-        fig0 = go.Heatmap(z=z0)
-        fig1 = go.Heatmap(z=z1)
+            # lines.append(f"ns = struct('input_fig', input_fig, 'output_fig', output_fig);")
+            # lines.append(f"ns = jsonencode(ns);")
+
+            # lines.append(f"savejson('Results', ns, '{filepath}');")
+            # lines.append("diary off;")
 
 
-        self.figures = [fig0, fig1]
-        return self.figures
+            for line in serialized:
+                self.log(f"Executing '{line}'...")
+                try:
+                    self.engine.eval(line, nargout=0)
+                    self.log("Execution complete.")
+                except Exception as e:
+                    self.log(f"{e.__class__.__name__} while executing line '{line}': {e}")
+                    continue
+
+
+                # script = '\n'.join(lines)
+                # with open("/home/kz/share/testing2.m", 'w') as f:
+                #     f.write(script)
+                # print(f"Text of testing2.m:")
+                # print(script)
+                #
+                # output = subprocess.check_output(f"""cd /home/kz/share/ && {path_to_matlab} -nosplash -nodesktop -r 'run("/home/kz/share/testing2.m"); quit;'""", shell=True)
+                # parsed_html = BeautifulSoup(output)
+                # text_only = parsed_html.text
+                # print(f"Process finished. Output is:\n\n {text_only}")
+            # figs = load_mat(filepath, keys=['input_fig', 'output_fig'])
+            self.log(f"Extracting arrays...")
+            try:
+                arr0 = self.engine.eval("input_fig")
+                arr1 = self.engine.eval("output_fig")
+
+            except Exception as e:
+                self.log(f"Error extracting arrays!")
+                self.log(sys.gettrace())
+                self.log(f"Couldn't get ns.input_fig: {e}")
+                arr0 = np.random.rand(8,12)
+                arr1 = np.random.rand(8,12)
+            self.log(f"Converting array elements to C Types...")
+            z0 = np.array(arr0, dtype=np.float64).tolist()
+            z1 = np.array(arr1, dtype=np.float64).tolist()
+            self.log(f"Conversion complete. Generating heatmaps...")
+            #z0 = [float(x) for self.engine.eval('input_fig'))
+            #z1 = list(self.engine.eval('output_fig'))
+            fig0 = go.Heatmap(z=z0)
+            fig1 = go.Heatmap(z=z1)
+            self._component_has_updates = True
+            self.log("Finished generating heatmaps.")
+
+
+            self.figures = [fig0, fig1]
+            return self.figures
         # script = '\n'.join(lines)
         # with open("/home/kz/share/testing2.m", 'w') as f:
         #     f.write(script)
@@ -953,30 +1097,82 @@ class App(Reactor):
 
 
 
-    def show_figures(self, node):
-        node.children = [dbc.Row([dbc.Col(dcc.Graph(figure={"data": [fig]}))]) for i, fig in enumerate(reversed(self.figures))]
-        return node
+    # def update_graph(self, node):
+    #     node.children = [dbc.Row([dbc.Col(dcc.Graph(figure={"data": self.figures}, id='spectrograms'))]) for i, fig in enumerate(reversed(self.figures))]
+    #     return node
+    #
+    # def show_status(self, node):
+    #     return [html.P(line) for line in self.get_status()]
+    #     #return html.Div(id='matlab_status_wrapper', children=[node])
 
 
 
+app_state = App(app, pdata)
+
+@app_state.app.callback([dash.dependencies.Output('matlab_status', 'children'), dash.dependencies.Output('spectrograms', 'figure')],
+              [dash.dependencies.Input('eventloop', 'n_intervals')],
+              [dash.dependencies.State('matlab_status_container', 'children')])
+def update_log(_, curr_status, app_state = app_state):
+    # print(f"Current status is: {curr_status}")
+    #if _ and isinstance(_, int) and not _ % 6:
+        #app_state.log("No component updates in the queue. Going back to sleep...")
+    # app_state.log(f"Status updater fired {_} times")
+    app_state.log("Hello!")
+    if not (app_state._component_has_updates or app_state._component_has_notification):
+        if app_state._suppress_notifications:
+            if _ and isinstance(_, int) and not _ % 50:
+                msg = random.choice(["zzzzzzzzzzz...", "zzzzzzzzzzzzzzzz...", "zzzzzZZZzzzz...", "ZZZZzzzzz *snort* zzzz...", "zzzz... no... i don't want that kind of struedel... zzzzz..."])
+                app_state.log(msg)
+            else:
+                raise dash.exceptions.PreventUpdate
+        else:
+            app_state.log(f"Queue empty. Going to sleep...")
+            app_state._suppress_notifications = True
+    elif app_state._suppress_notifications:
+        app_state.log(f"*wakes up*")
+        app_state.log(f"*yaaaaawn* Alright, alright, I'm awake.")
+        app_state._suppress_notifications = False
+
+    if app_state._component_has_updates:
+        app_state.log(f"Generating spectrogram...")
+        app_state._component_has_updates = False
+        graphs = gen_noisy_spectrograms(titles=['before', 'after'])
+        app_state.log(f"Sending rendered graphs to client...")
+    else:
+        graphs = no_update
+
+    if app_state._component_has_notification:
+        status = [html.P(msg) for msg in reversed(app_state.get_status())]
+        if len(status) > 100:
+            status = status[:100]
+    else:
+        status = no_update
 
 
+    return status, graphs
 
-import dash_core_components as dcc
-import dash_bootstrap_components as dbc
+# start_server = input(f"Start the server now? (y/n) :")
+# if start_server.strip().lower().startswith('y'):
+#     app_state.app.run_server(port=8001)
 
 
+# if __name__ == '__main__':
 
-if __name__ == '__main__':
+    
+
+# app_state.app.run_server(port=8000, debug=True)
+# server = app_state.app.server
+
 
     # nodes = {node.id:node for node in [dbc.Input(id='foo', type='text', value='', className='say_hello', debounce=True),
     #                                    daq.BooleanSwitch(id='bar', on=True, className='print_bar'),
     #                                    html.Button(id='submit', block=True, on_click='write_to_matlab')]}
-    app_state = App(app, pdata)
-    app_state.app.run_server(port=8888)
+
+    #app_state.app.run_server(port=8888)
 
     # foo = dbc.Input(id='foo', hidden="lambda self: str(self.value)", value='hello')
 
 
-    # app_state.app.run_server(port=8003, debug=True, dev_tools_hot_reload=True)
+    # app_state.app.run_server(port=8004, debug=False, dev_tools_hot_reload=False)
     # app.run_server(port=8000)
+# app_state.app.run_server(port=8000, debug=True)

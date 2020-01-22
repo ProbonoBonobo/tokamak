@@ -65,15 +65,19 @@ def apply_hotfixes():
             f"prop, but dash_bootstrap_components doesn't define this property, so none of its subclasses "
             f"are runtime-extensible)."
         )
-    its_hash = get_md5_hash(path_to_base_component)
-    required_hash = get_md5_hash(path_to_base_component_override)
-    base_component_needs_override = bool(its_hash != required_hash)
+    base_component_hash = get_md5_hash(path_to_base_component)
+    base_component_required_hash = get_md5_hash(path_to_base_component_override)
+    base_component_needs_override = bool(base_component_hash != base_component_required_hash)
+
+    document_title_hash = get_md5_hash(path_to_)
+
+
     if not base_component_needs_override:
         return True
     color = red if base_component_needs_override else green
     log(f"    Resolved filepath: {path_to_base_component}")
-    log(f"    Resolved md5 hash: {its_hash}")
-    log(f"    Required md5 hash: {required_hash}")
+    log(f"    Resolved md5 hash: {base_component_hash}")
+    log(f"    Required md5 hash: {base_component_required_hash}")
     log(
         f"    Requires override: {color('Yes' if base_component_needs_override else 'No')}"
     )
@@ -85,7 +89,7 @@ def apply_hotfixes():
     source = inspect.getsource(Component)
     log(f"Source code of Component is now:")
     print(source)
-    success = after == required_hash
+    success = after == base_component_required_hash
     return success
 
 

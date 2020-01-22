@@ -137,7 +137,7 @@ def kill(pid):
     cmd = f"kill -9 {pid}"
     out = ""
     try:
-        out = subprocess.check_call(cmd, shell=True).decode("utf-8")
+        out = subprocess.check_output(cmd, shell=True).decode("utf-8")
     except subprocess.CalledProcessError as e:
         out = "common::run_command() : [ERROR]: output = %s, error code = %s\n" % (
             e.output,
@@ -147,23 +147,40 @@ def kill(pid):
         sys.stderr.write(out)
     return f"Exit code: {out}"
 
+def killprog(program_name):
+    proc = subprocess.run("ps -ef | grep matlab", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    fpatt = r'^\S+\s*(\d+).*?(grep)?'
+    patt = re.compile(fpatt, re.MULTILINE)
+    pids = []
+    if proc.stdout:
+        out = proc.stdout.decode("utf-8")
+        for pid in re.findall(patt, out):
+            pid, is_self = pid
+            if not is_self:
+                pids.append(int(pid))
+                print(f"Killing pid {pid}")
+                os.system(f"kill -9 {pid}")
+    return pids
 
-def pidofport(port, killall=False):
+def killport(port, killall=True):
     cmd = f"fuser {port}/tcp"
     out = ""
+    pid = None
     try:
-        out = subprocess.check_output(cmd, shell=True).decode("utf-8")
+        proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        out = "common::run_command() : [ERROR]: output = %s, error code = %s\n" % (
-            e.output,
-            e.returncode,
-        )
-    finally:
-        sys.stdout.write(out)
-    pids = map(lambda x: int(x), re.findall(r"(\d+)", out)[1:])
-    if killall:
-        for pid in pids:
+        return pid
+    if proc.stdout:
+        out = proc.stdout.decode("utf-8")
+        pids = list(filter(lambda pid: pid != port, map(lambda x: int(x), re.findall(r"(\d+)", out))))
+    else:
+        pids = []
+    for pid in pids:
+        try:
             kill(pid)
+        except Exception as e:
+            print(f"Error killing process {pid}: {e.__class__.__name__} :: {e}")
+    return pids, out
 
 
 def conditional_breakpoint(assertion):
@@ -189,3 +206,4 @@ if __name__ == "__main__":
 def write_matlab_config(params):
     pass
     # for k,v
+pidofport = killport

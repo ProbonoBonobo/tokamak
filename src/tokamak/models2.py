@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
+import dash_core_components as dcc
 import dash
 import dash_html_components as html
 from dash.development.base_component import Component
@@ -42,13 +43,16 @@ class Reactor:
         self.external_stylesheets = external_stylesheets or self._external_stylesheets
         self.hide_navbar = hide_navbar
         self.app = app or self._initialize_app()
+
         self.targets = self.acquire_targets()
+        self.async_channels = self.acquire_async_targets()
         self.transformers = self.resolve_transformers()
         self.renderers = self.resolve_renderers()
         self.click_handlers = self.resolve_click_handlers()
         self.callback = self.generate_callback()
-        self.app.layout = self.set_initial_layout()
 
+
+        self.app.layout = self.set_initial_layout()
     def _initialize_app(self):
         ns = {}
         init_str = """app = dash.Dash(
@@ -98,14 +102,21 @@ app.layout = html.Div(id='approot', children=[])"""
                 dark=True,
                 style={"color": "#EEEEEE"},
             )
-        root = dbc.Container(
+        root = html.Div(
                 id="root", children=self.render(), style={"marginTop": "61.8px"}
             )
+
         if self.hide_navbar:
             layout = [root]
         else:
             layout = [navbar, root]
-        return html.Div(layout)
+
+
+
+        for id, node in self.nodes.items():
+            if hasattr(node, 'async') and node.async:
+                layout.append(node)
+        return html.Div([dcc.Interval(id='eventloop',interval=500), *layout])
 
     def acquire_targets(self):
         targets = []
@@ -127,6 +138,17 @@ app.layout = html.Div(id='approot', children=[])"""
             if 'debounce' in observable_props:
                 node.debounce = True
         return targets
+
+    def acquire_async_targets(self):
+        intervals = defaultdict(list)
+        for id, node in self.nodes.items():
+            if not hasattr(node, 'interval'):
+                continue
+            elif node.interval and isinstance(node.interval, (int, float)):
+                intervals[node.interval].append(node)
+            else:
+                raise ValueError(f"{id}.interval has an invalid value. (Got: {node.interval}; Expected: int or float > 0)")
+        return intervals
 
     def resolve_generic_target(self, prop_name):
         d = defaultdict(list)
@@ -179,28 +201,32 @@ app.layout = html.Div(id='approot', children=[])"""
                 for handler in self.click_handlers[id]:
                     print(f"Firing onClick handler for node {id}: {handler.__name__}")
                     handler()
+                    print(f"Finished executing onClick handler for node {id}: {handler.__name__}")
 
     def generate_callback(self):
         @self.app.callback(dash.dependencies.Output('root', 'children'),
                            [dash.dependencies.Input(*target) for target in self.targets])
-        def update_state(*args):
-            print(f"Callback fired!")
+        def update_state(*args, app_state=self):
+            # self.log(f"Callback fired!")
             possible_mutations = [([d['value'], *d['prop_id'].split(".")]) for d in dash.callback_context.triggered]
-            print(dash.callback_context.triggered)
+            # self.log(str(dash.callback_context.triggered))
             actual_mutations = []
             for value, id, prop in possible_mutations:
                 before = getattr(self.nodes[id], prop)
-                print(f"{id}.{prop} changed to {value} (Was: {getattr(self.nodes[id], prop)})")
                 if before == value:
-                    print(f"It's the same... ")
+                    print(f"{id}.{prop} did not change, even though it's listed as a trigger in the callback context")
                     continue
                 else:
+
+                    self.log(f"{id}.{prop} changed to {value} (Was: {getattr(self.nodes[id], prop)})")
                     actual_mutations.append((id, prop))
                     setattr(self.nodes[id], prop, value)
             if not actual_mutations:
+                print(f"No mutations.")
                 raise PreventUpdate
 
             else:
+                self.log(f"Detected {len(actual_mutations)} mutated props this cycle: {actual_mutations}")
                 self.apply_transformers()
                 self.fire_onclick_handlers(actual_mutations)
                 rendered = self.render()
